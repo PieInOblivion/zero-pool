@@ -60,34 +60,36 @@ impl ThreadPool {
     }
 
     // Submit multiple tasks as a batch
-    pub fn submit_batch(&self, tasks: Vec<(*const (), TaskFn)>) -> WorkFutureBatch {
-        if tasks.is_empty() {
-            return WorkFutureBatch::new(Vec::new());
-        }
+     pub fn submit_batch(&self, tasks: Vec<(*const (), TaskFn)>) -> WorkFutureBatch {
+        debug_assert!(!tasks.is_empty(), "Cannot submit empty task batch");
 
         let mut futures = Vec::with_capacity(tasks.len());
+        let worker_count = self.work_queues.len();
+        let chunk_size = (tasks.len() + worker_count - 1) / worker_count; // Round up division
+        let chunks_needed = (tasks.len() + chunk_size - 1) / chunk_size; // Number of workers that will get work
 
-        // Submit all work items first without any notifications
-        for (params, task_fn) in tasks {
-            let future = WorkFuture::new();
-            let work_item = WorkItem::new(params, task_fn, future.clone());
+        // Start from the current atomic position for load balancing across batches
+        let start_worker = self.next_queue.fetch_add(chunks_needed, Ordering::Relaxed) % worker_count;
 
-            let queue_idx =
-                self.next_queue.fetch_add(1, Ordering::Relaxed) % self.work_queues.len();
-
-            // Submit without immediate notification
-            self.work_queues[queue_idx].add_work_item(work_item);
-            futures.push(future);
+        // Divide tasks into chunks and assign each chunk to a worker
+        let mut workers_with_work = Vec::new();
+        for (chunk_idx, chunk) in tasks.chunks(chunk_size).enumerate() {
+            let worker_idx = (start_worker + chunk_idx) % worker_count;
+            
+            for (params, task_fn) in chunk {
+                let future = WorkFuture::new();
+                let work_item = WorkItem::new(*params, *task_fn, future.clone());
+                
+                self.work_queues[worker_idx].add_work_item(work_item);
+                futures.push(future);
+            }
+            
+            workers_with_work.push(worker_idx);
         }
 
-        // Notify workers whose queues have work
-        // Alternative approach idea: track which workers recieved work with vec<bool>, and notify using that vec
-        // Alternative modification: first check if worker has work in queue already, then don't notify.
-        // Notifying condvar that isn't waiting should have nearly no impact versus checking an atomic first. Needs comparing
-        for queue in &self.work_queues {
-            if queue.items_count.load(Ordering::Acquire) > 0 {
-                queue.notify_worker();
-            }
+        // Notify all workers that received work
+        for worker_idx in workers_with_work {
+            self.work_queues[worker_idx].notify_worker();
         }
 
         WorkFutureBatch::new(futures)
