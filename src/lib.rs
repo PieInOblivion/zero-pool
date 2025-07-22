@@ -1,0 +1,39 @@
+// Zero-Pool: Ultra-High Performance Thread Pool
+// A thread pool designed for maximum performance through:
+// - Zero-overhead task submission via raw pointers
+// - Result-via-parameters pattern (no result transport)
+// - Per-worker queues to minimize contention
+// - Function pointer dispatch (no trait objects)
+//
+// Safety
+// This library uses raw pointers for maximum performance. You must ensure:
+// - Parameter structs live until `future.wait()` completes
+// - Result pointers remain valid until task completion
+// - No data races in your task functions
+
+mod future;
+mod macros;
+mod pool;
+mod queue;
+mod work_item;
+mod worker;
+
+use std::num::NonZeroUsize;
+
+pub use pool::ThreadPool;
+
+// Task function signature, takes raw pointer to parameters
+pub type TaskFn = fn(*const ());
+
+// Convenience function to create a new thread pool
+pub fn new() -> ThreadPool {
+    let worker_count = std::thread::available_parallelism()
+        .map(NonZeroUsize::get)
+        .unwrap_or(1);
+    ThreadPool::new(worker_count)
+}
+
+// Create thread pool with specific worker count
+pub fn with_workers(worker_count: usize) -> ThreadPool {
+    ThreadPool::new(worker_count)
+}

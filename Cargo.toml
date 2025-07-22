@@ -1,0 +1,13 @@
+[package]
+name = "zero-pool"
+version = "0.1.0"
+edition = "2024"
+authors = ["PieInOblivion"]
+license = "MIT"
+description = "Ultra-high performance thread pool with zero-overhead task submission"
+repository = "https://github.com/PieInOblivion/zero-pool"
+keywords = ["threadpool", "performance", "parallel", "tasks", "zero-overhead"]
+categories = ["concurrency", "algorithms"]
+
+[dependencies]
+# No external dependencies, stdlib only
