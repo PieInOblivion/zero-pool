@@ -1,37 +1,31 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::thread::{self, JoinHandle};
+use std::{
+    sync::Arc,
+    thread::{self, JoinHandle},
+};
 
-use crate::queue::WorkQueue;
-use crate::work_item::WorkItem;
+use crate::{future::WorkFuture, queue::BatchQueue, work_item::WorkItem};
 
-// Worker thread that processes tasks from its dedicated queue
 pub struct Worker {
     _id: usize,
-    pub(crate) should_shutdown: Arc<AtomicBool>,
-    pub(crate) handle: Option<JoinHandle<()>>,
+    pub(crate) handle: JoinHandle<()>,
 }
 
 impl Worker {
-    pub fn new(id: usize, work_queue: Arc<WorkQueue>) -> Worker {
-        let should_shutdown = Arc::new(AtomicBool::new(false));
-        let shutdown_flag = Arc::clone(&should_shutdown);
-
+    pub fn new(id: usize, queue: Arc<BatchQueue>) -> Worker {
         let handle = thread::Builder::new()
             .name(format!("zero-pool-worker-{}", id))
             .spawn(move || {
                 loop {
-                    // Wait on condvar
-                    work_queue.wait_for_work();
+                    // wait for work
+                    queue.wait_for_work();
 
-                    // Continue while work queue is not empty
-                    while let Some(work_item) = work_queue.try_get_work() {
-                        Self::process_work(work_item);
+                    // once woken up, greedily drain ALL available work
+                    while let Some((work_item, batch_future)) = queue.claim_work() {
+                        Self::process_work(work_item, batch_future);
                     }
 
-                    // Check shutdown flag. Better to have an empty queue check when shutdown is required
-                    // than to check everytime a worker is woken up
-                    if shutdown_flag.load(Ordering::Acquire) {
+                    // only check shutdown when queue is empty
+                    if queue.is_shutdown() {
                         break;
                     }
                 }
@@ -40,17 +34,15 @@ impl Worker {
 
         Worker {
             _id: id,
-            should_shutdown,
-            handle: Some(handle),
+            handle: handle,
         }
     }
 
-    // Process a single work item
-    fn process_work(work_item: WorkItem) {
-        // Call the task function with raw parameters
+    #[inline]
+    fn process_work(work_item: &WorkItem, batch_future: &WorkFuture) {
+        // call the task function with raw parameters
         (work_item.task_fn)(work_item.params);
 
-        // Signal completion
-        work_item.future.complete();
+        batch_future.complete_one();
     }
 }

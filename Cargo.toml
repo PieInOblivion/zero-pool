@@ -10,12 +10,11 @@ keywords = ["threadpool", "performance", "parallel", "tasks", "zero-overhead"]
 categories = ["concurrency", "algorithms"]
 
 [dependencies]
-# No external dependencies, stdlib only
+# stdlib only!
 
 [dev-dependencies]
-criterion = "0.6"
 rayon = "1.10"
 
 [[bench]]
 name = "comparison"
-harness = false
+# zero-pool compiles on stable, but currently uses nightly for benches

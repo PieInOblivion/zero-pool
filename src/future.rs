@@ -1,86 +1,75 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-// Future that signals task completion
+// public work future with arc wrapped fields
 #[derive(Clone)]
 pub struct WorkFuture {
-    pub state: Arc<(Mutex<bool>, Condvar)>,
+    remaining: Arc<AtomicUsize>,
+    state: Arc<(Mutex<()>, Condvar)>,
 }
 
 impl WorkFuture {
-    pub fn new() -> Self {
+    // create a new work future for the given number of tasks
+    pub fn new(task_count: usize) -> Self {
         WorkFuture {
-            state: Arc::new((Mutex::new(false), Condvar::new())),
+            remaining: Arc::new(AtomicUsize::new(task_count)),
+            state: Arc::new((Mutex::new(()), Condvar::new())),
         }
     }
 
-    // Wait for the task to complete
-    pub fn wait(&self) {
-        let (lock, cvar) = &*self.state;
-        let mut completed = lock.lock().unwrap();
-        while !*completed {
-            completed = cvar.wait(completed).unwrap();
-        }
-    }
-
-    // Wait with timeout
-    pub fn wait_timeout(&self, timeout: Duration) -> bool {
-        let (lock, cvar) = &*self.state;
-        let mut completed = lock.lock().unwrap();
-        while !*completed {
-            let (guard, timeout_result) = cvar.wait_timeout(completed, timeout).unwrap();
-            completed = guard;
-            if timeout_result.timed_out() {
-                return false;
-            }
-        }
-        true
-    }
-
-    // Check if complete
+    // check if all tasks are complete
     pub fn is_complete(&self) -> bool {
-        *self.state.0.lock().unwrap()
+        self.remaining.load(Ordering::Acquire) == 0
     }
 
-    // Mark as complete (internal fn only)
-    pub(crate) fn complete(&self) {
-        let (lock, cvar) = &*self.state;
-        *lock.lock().unwrap() = true;
-        cvar.notify_all();
-    }
-}
-
-// Batch of futures for multiple tasks
-pub struct WorkFutureBatch {
-    pub futures: Vec<WorkFuture>,
-}
-
-impl WorkFutureBatch {
-    pub fn new(futures: Vec<WorkFuture>) -> Self {
-        WorkFutureBatch { futures }
-    }
-
-    // Check if all tasks are complete
-    pub fn is_complete(&self) -> bool {
-        self.futures.iter().all(|f| f.is_complete())
-    }
-
-    // Wait for all tasks to complete
+    // wait for all tasks to complete
     pub fn wait(self) {
-        for future in self.futures {
-            future.wait();
+        if self.is_complete() {
+            return;
+        }
+
+        let (lock, cvar) = &*self.state;
+        let mut guard = lock.lock().unwrap();
+
+        while !self.is_complete() {
+            guard = cvar.wait(guard).unwrap();
         }
     }
 
-    // Wait for all tasks with timeout
+    // wait for all tasks with timeout
     pub fn wait_timeout(self, timeout: Duration) -> bool {
-        let start = std::time::Instant::now();
-        for future in self.futures {
-            let remaining = timeout.saturating_sub(start.elapsed());
-            if !future.wait_timeout(remaining) {
-                return false;
+        if self.is_complete() {
+            return true;
+        }
+
+        let (lock, cvar) = &*self.state;
+        let mut guard = lock.lock().unwrap();
+
+        while !self.is_complete() {
+            let (new_guard, timeout_result) = cvar.wait_timeout(guard, timeout).unwrap();
+            guard = new_guard;
+            if timeout_result.timed_out() {
+                return self.is_complete();
             }
         }
         true
+    }
+
+    // get remaining task count
+    pub fn remaining_count(&self) -> usize {
+        self.remaining.load(Ordering::Acquire)
+    }
+
+    // complete one task, decrements counter and notifies if all done
+    #[inline]
+    pub fn complete_one(&self) {
+        let remaining_count = self.remaining.fetch_sub(1, Ordering::AcqRel);
+
+        // if this was the last task, notify waiters
+        if remaining_count == 1 {
+            let (_lock, cvar) = &*self.state;
+            cvar.notify_all();
+        }
     }
 }

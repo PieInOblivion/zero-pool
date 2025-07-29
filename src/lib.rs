@@ -10,7 +10,6 @@
 // - Parameter structs live until `future.wait()` completes
 // - Result pointers remain valid until task completion
 // - No data races in your task functions
-
 mod future;
 mod macros;
 mod pool;
@@ -22,10 +21,10 @@ use std::num::NonZeroUsize;
 
 pub use pool::ThreadPool;
 
-// Task function signature, takes raw pointer to parameters
+// task function signature, takes raw pointer to parameters
 pub type TaskFn = fn(*const ());
 
-// Convenience function to create a new thread pool
+// convenience function to create a new thread pool
 pub fn new() -> ThreadPool {
     let worker_count = std::thread::available_parallelism()
         .map(NonZeroUsize::get)
@@ -33,7 +32,7 @@ pub fn new() -> ThreadPool {
     ThreadPool::new(worker_count)
 }
 
-// Create thread pool with specific worker count
+// create thread pool with specific worker count
 pub fn with_workers(worker_count: usize) -> ThreadPool {
     ThreadPool::new(worker_count)
 }
