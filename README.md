@@ -1,21 +1,22 @@
 # Zero-Pool: Zero-Allocation Thread Pool
 *When microseconds matter and allocation is the enemy.*
 
-A thread pool designed for maximum performance through zero allocation overhead and minimal runtime costs. Zero-Pool achieves extreme efficiency by eliminating per-task allocations, using raw pointers for parameters, and employing per-worker queues with efficient coordination.
+This is an experimental thread pool implementation focused on exploring lock-free MPMC queue techniques and zero-allocation task dispatch. Consider this a performance playground rather than a production-ready library.
 
-## Key Features
+## Key Features:
 
-- **24 bytes per task** - minimal memory footprint per work item
-- **Zero allocation overhead per task** - raw pointer parameters eliminate boxing overhead
-- **Contention-free work queues** - per-worker queues eliminate shared queue bottlenecks
-- **Zero virtual dispatch** - function pointer dispatch avoids vtable lookups entirely
+- **16 bytes per task** - minimal memory footprint per work item
+- **Zero locks** - lock free queue
+- **Zero queue limit** - unbounded
+- **Zero virtual dispatch** - function pointer dispatch avoids vtable lookups
+- **Zero core spinning** - event based
 - **Zero result transport cost** - tasks write directly to caller-provided memory
-- **Minimal coordination overhead** - efficient condvar blocking without polling
-- **Standard library only** - no external dependencies, stable Rust compatible
+- **Zero per worker queues** - single global queue structure
+- **Zero external dependencies** - standard library and stable rust only
 
-Zero-Pool achieves its performance through an architecture where each worker thread operates on its own dedicated queue, eliminating contention and cache line bouncing. Tasks are distributed round-robin across workers and execute using function pointers rather than trait objects, avoiding vtable lookups entirely. The result-via-parameters pattern means tasks write results directly to caller-provided memory, eliminating any transport overhead. Workers use condvar coordination to block efficiently when no work is available, avoiding both polling overhead and unnecessary context switching.
+Workers are only passed 16 bytes per work item, a function pointer and a struct pointer. Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead.
 
-Since the library uses raw pointers for maximum performance, you must ensure parameter structs remain valid until `future.wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe macros like `zp_submit_task!` and `zp_submit_batch_uniform!` for convenient usage while maintaining zero allocation overhead.
+Since the library uses raw pointers, you must ensure parameter structs remain valid until `future.wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe macros like `zp_submit_task!` and `zp_submit_batch_uniform!` for convenient usage.
 
 ## Example Usage
 
@@ -54,20 +55,54 @@ zp_define_task_fn!(my_task, MyTask, |params| {
 });
 ```
 
-### `zp_write_result!`
+### `zp_write!`
 
-Optional macro that eliminates explicit unsafe blocks when writing task results.
+Optional macro that eliminates explicit unsafe blocks when writing to params struct.
 
 ```rust
-use zero_pool::{zp_define_task_fn, zp_write_result};
+use zero_pool::{zp_define_task_fn, zp_write};
 
 zp_define_task_fn!(my_task, MyTask, |params| {
     let mut sum = 0u64;
     for i in 0..params.iterations {
         sum += i as u64;
     }
-    zp_write_result!(params.result, sum);
+    zp_write!(params.result, sum);
 });
+```
+
+### `zp_write_indexed!`
+
+Safely writes a value to a specific index in a Vec or array via raw pointer, useful for batch processing where each task writes to a different index.
+
+```rust
+use zero_pool::{zp_task_params, zp_define_task_fn, zp_write_indexed};
+
+zp_task_params! {
+    BatchTask {
+        index: usize,
+        work_size: usize,
+        results: *mut Vec<u64>,
+    }
+}
+
+zp_define_task_fn!(batch_task, BatchTask, |params| {
+    let mut sum = 0u64;
+    for i in 0..params.work_size {
+        sum += i as u64;
+    }
+    zp_write_indexed!(params.results, params.index, sum);
+});
+
+// Usage with a pre-allocated vector
+let pool = zero_pool::new();
+let mut results = vec![0u64; 100];
+let tasks: Vec<_> = (0..100).map(|i| {
+    BatchTask::new(i, 1000, &mut results)
+}).collect();
+
+let batch = zp_submit_batch_uniform!(pool, tasks, batch_task);
+batch.wait();
 ```
 
 ### `zp_submit_task!`
