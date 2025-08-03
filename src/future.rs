@@ -67,7 +67,8 @@ impl WorkFuture {
 
         // if this was the last task, notify waiters
         if remaining_count == 1 {
-            let (_lock, cvar) = &*self.state;
+            let (lock, cvar) = &*self.state;
+            let _guard = lock.lock().unwrap();
             cvar.notify_all();
         }
     }
