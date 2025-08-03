@@ -58,13 +58,12 @@ impl WorkFuture {
 
     // get remaining task count
     pub fn remaining_count(&self) -> usize {
-        self.remaining.load(Ordering::Acquire)
+        self.remaining.load(Ordering::Relaxed)
     }
 
     // complete one task, decrements counter and notifies if all done
-    #[inline]
     pub fn complete_one(&self) {
-        let remaining_count = self.remaining.fetch_sub(1, Ordering::AcqRel);
+        let remaining_count = self.remaining.fetch_sub(1, Ordering::Relaxed);
 
         // if this was the last task, notify waiters
         if remaining_count == 1 {

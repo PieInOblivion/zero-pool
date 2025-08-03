@@ -1,5 +1,6 @@
 use crate::TaskFn;
 
+#[derive(Copy, Clone)]
 pub struct WorkItem {
     pub params: *const (),
     pub task_fn: TaskFn,

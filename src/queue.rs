@@ -1,44 +1,7 @@
+use crate::work_batch::WorkBatch;
 use crate::{TaskFn, future::WorkFuture, work_item::WorkItem};
-use std::ptr;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::{Condvar, Mutex};
-
-pub struct WorkBatch {
-    pub items: Vec<WorkItem>,
-    pub future: WorkFuture,
-    next_item: AtomicUsize,
-    next: AtomicPtr<WorkBatch>,
-}
-
-impl WorkBatch {
-    pub fn new(items: Vec<WorkItem>, future: WorkFuture) -> Self {
-        WorkBatch {
-            items,
-            future,
-            next_item: AtomicUsize::new(0),
-            next: AtomicPtr::new(ptr::null_mut()),
-        }
-    }
-
-    pub fn claim_next_item(&self) -> Option<&WorkItem> {
-        let item_index = self.next_item.fetch_add(1, Ordering::Relaxed);
-
-        if item_index < self.items.len() {
-            Some(&self.items[item_index])
-        } else {
-            None
-        }
-    }
-
-    pub fn has_work(&self) -> bool {
-        self.next_item.load(Ordering::Relaxed) < self.items.len()
-    }
-
-    pub fn remaining_items(&self) -> usize {
-        let claimed = self.next_item.load(Ordering::Relaxed);
-        self.items.len().saturating_sub(claimed)
-    }
-}
 
 unsafe impl Send for BatchQueue {}
 unsafe impl Sync for BatchQueue {}
@@ -84,7 +47,7 @@ impl BatchQueue {
         self.condvar.notify_all();
     }
 
-    pub fn claim_work(&self) -> Option<(&WorkItem, &WorkFuture)> {
+    pub fn claim_work(&self) -> Option<(WorkItem, &WorkFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         while !current.is_null() {
@@ -130,7 +93,7 @@ impl BatchQueue {
                 return true;
             }
 
-            current = batch.next.load(Ordering::Acquire);
+            current = batch.next.load(Ordering::Relaxed);
         }
 
         false
@@ -138,12 +101,12 @@ impl BatchQueue {
 
     pub fn len(&self) -> usize {
         let mut total = 0;
-        let mut current = self.head.load(Ordering::Acquire);
+        let mut current = self.head.load(Ordering::Relaxed);
 
         while !current.is_null() {
             let batch = unsafe { &*current };
             total += batch.remaining_items();
-            current = batch.next.load(Ordering::Acquire);
+            current = batch.next.load(Ordering::Relaxed);
         }
 
         total

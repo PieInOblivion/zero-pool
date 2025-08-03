@@ -3,11 +3,11 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::{future::WorkFuture, queue::BatchQueue, work_item::WorkItem};
+use crate::queue::BatchQueue;
 
 pub struct Worker {
     _id: usize,
-    pub(crate) handle: JoinHandle<()>,
+    pub handle: JoinHandle<()>,
 }
 
 impl Worker {
@@ -21,7 +21,9 @@ impl Worker {
 
                     // once woken up, greedily drain ALL available work
                     while let Some((work_item, batch_future)) = queue.claim_work() {
-                        Self::process_work(work_item, batch_future);
+                        // call the task function with raw parameters
+                        (work_item.task_fn)(work_item.params);
+                        batch_future.complete_one();
                     }
 
                     // only check shutdown when queue is empty
@@ -36,13 +38,5 @@ impl Worker {
             _id: id,
             handle: handle,
         }
-    }
-
-    #[inline]
-    fn process_work(work_item: &WorkItem, batch_future: &WorkFuture) {
-        // call the task function with raw parameters
-        (work_item.task_fn)(work_item.params);
-
-        batch_future.complete_one();
     }
 }

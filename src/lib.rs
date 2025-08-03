@@ -14,6 +14,7 @@ mod future;
 mod macros;
 mod pool;
 mod queue;
+mod work_batch;
 mod work_item;
 mod worker;
 
