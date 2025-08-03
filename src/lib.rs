@@ -12,6 +12,7 @@
 // - No data races in your task functions
 mod future;
 mod macros;
+mod padded_atomic;
 mod pool;
 mod queue;
 mod work_batch;
