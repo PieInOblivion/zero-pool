@@ -18,6 +18,12 @@ Workers are only passed 16 bytes per work item, a function pointer and a struct 
 
 Since the library uses raw pointers, you must ensure parameter structs remain valid until `future.wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe macros like `zp_submit_task!` and `zp_submit_batch_uniform!` for convenient usage.
 
+## Benchmarks
+```rust
+test bench_indexed_computation_rayon    ... bench:      40,207.46 ns/iter (+/- 12,351.30)
+test bench_indexed_computation_zeropool ... bench:      55,780.15 ns/iter (+/- 3,830.86)
+```
+
 ## Example Usage
 
 **Recommended:** Use the type-erasing macros for safe and convenient task submission:
