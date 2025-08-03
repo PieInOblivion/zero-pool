@@ -1,14 +1,15 @@
+use crate::padded_type::PaddedAtomicPtr;
 use crate::work_batch::WorkBatch;
 use crate::{TaskFn, future::WorkFuture, work_item::WorkItem};
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 
 unsafe impl Send for BatchQueue {}
 unsafe impl Sync for BatchQueue {}
 
 pub struct BatchQueue {
-    head: AtomicPtr<WorkBatch>,
-    tail: AtomicPtr<WorkBatch>,
+    head: PaddedAtomicPtr<WorkBatch>,
+    tail: PaddedAtomicPtr<WorkBatch>,
 
     shutdown: AtomicBool,
 
@@ -21,8 +22,8 @@ impl BatchQueue {
         let dummy = Box::into_raw(Box::new(WorkBatch::new(Vec::new(), WorkFuture::new(0))));
 
         BatchQueue {
-            head: AtomicPtr::new(dummy),
-            tail: AtomicPtr::new(dummy),
+            head: PaddedAtomicPtr::new(dummy),
+            tail: PaddedAtomicPtr::new(dummy),
             shutdown: AtomicBool::new(false),
             condvar_mutex: Mutex::new(()),
             condvar: Condvar::new(),

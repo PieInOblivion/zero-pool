@@ -2,21 +2,21 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use crate::padded_atomic::PaddedAtomicUsize;
+use crate::padded_type::PaddedAtomicUsize;
 
 // public work future with arc wrapped fields
 #[derive(Clone)]
 pub struct WorkFuture {
-    state: Arc<(Mutex<()>, Condvar)>,
     remaining: Arc<PaddedAtomicUsize>,
+    state: Arc<(Mutex<()>, Condvar)>,
 }
 
 impl WorkFuture {
     // create a new work future for the given number of tasks
     pub fn new(task_count: usize) -> Self {
         WorkFuture {
-            state: Arc::new((Mutex::new(()), Condvar::new())),
             remaining: Arc::new(PaddedAtomicUsize::new(task_count)),
+            state: Arc::new((Mutex::new(()), Condvar::new())),
         }
     }
 

@@ -1,22 +1,21 @@
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::Ordering;
 
-use crate::{future::WorkFuture, padded_atomic::PaddedAtomicUsize, work_item::WorkItem};
+use crate::{future::WorkFuture, padded_type::{PaddedAtomicPtr, PaddedAtomicUsize}, work_item::WorkItem};
 
-#[repr(align(64))]
 pub struct WorkBatch {
+    next_item: PaddedAtomicUsize,
     pub items: Vec<WorkItem>,
     pub future: WorkFuture,
-    pub next: AtomicPtr<WorkBatch>,
-    next_item: PaddedAtomicUsize,
+    pub next: PaddedAtomicPtr<WorkBatch>,
 }
 
 impl WorkBatch {
     pub fn new(items: Vec<WorkItem>, future: WorkFuture) -> Self {
         WorkBatch {
+            next_item: PaddedAtomicUsize::new(0),
             items,
             future,
-            next: AtomicPtr::new(std::ptr::null_mut()),
-            next_item: PaddedAtomicUsize::new(0),
+            next: PaddedAtomicPtr::new(std::ptr::null_mut()),
         }
     }
 
