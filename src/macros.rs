@@ -62,52 +62,6 @@ macro_rules! zp_define_task_fn {
     };
 }
 
-// Submit a task with compile-time type safety
-//
-// - Example
-// use zero_pool::zp_submit_task;
-//
-// let pool = zero_pool::new();
-// let mut result = 0u64;
-// let task = ComputeTask::new(1000, 17, &mut result);
-// let future = zp_submit_task!(pool, task, compute_task);
-// future.wait();
-#[macro_export]
-macro_rules! zp_submit_task {
-    ($pool:expr, $params:expr, $task_fn:ident) => {{
-        let params_ptr = &$params as *const _ as *const ();
-        $pool.submit_task(params_ptr, $task_fn)
-    }};
-}
-
-// Submit a batch of uniform tasks with type safety
-#[macro_export]
-macro_rules! zp_submit_batch_uniform {
-    ($pool:expr, $params_vec:expr, $task_fn:ident) => {{
-        // Single iteration: directly create Vec<(*const (), TaskFn)>
-        let tasks: Vec<(*const (), $crate::TaskFn)> = $params_vec
-            .iter()
-            .map(|params| (params as *const _ as *const (), $task_fn as $crate::TaskFn))
-            .collect();
-
-        $pool.submit_task_batch(tasks)
-    }};
-}
-
-// Submit a batch of mixed tasks with type safety
-#[macro_export]
-macro_rules! zp_submit_batch_mixed {
-    ($pool:expr, [$( ($params:expr, $task_fn:ident) ),* $(,)?]) => {{
-        let tasks: Vec<(*const (), $crate::TaskFn)> = vec![
-            $(
-                ($params as *const _ as *const (), $task_fn as $crate::TaskFn)
-            ),*
-        ];
-
-        $pool.submit_task_batch(tasks)
-    }};
-}
-
 // Write a result to a raw pointer safely
 //
 // - Example
@@ -149,4 +103,30 @@ macro_rules! zp_write_indexed {
             (&mut (*$collection_ptr))[$index] = $value;
         }
     };
+}
+
+// Submit a batch of mixed tasks with type safety
+#[macro_export]
+macro_rules! zp_submit_batch_mixed {
+    ($pool:expr, [$( ($params:expr, $task_fn:ident) ),* $(,)?]) => {{
+        let tasks: Vec<(*const (), $crate::TaskFn)> = vec![
+            $(
+                ($params as *const _ as *const (), $task_fn as $crate::TaskFn)
+            ),*
+        ];
+
+        $pool.submit_raw_task_batch(&tasks)
+    }};
+}
+
+// Convert a vector of (params, task_fn) tuples to Vec<(*const (), TaskFn)>
+// Works with mixed parameter types
+#[macro_export]
+macro_rules! zp_mixed_tasks_to_pointers {
+    ($tasks_vec:expr) => {{
+        $tasks_vec
+            .iter()
+            .map(|(params, task_fn)| (params as *const _ as *const (), *task_fn as $crate::TaskFn))
+            .collect::<Vec<(*const (), $crate::TaskFn)>>()
+    }};
 }

@@ -129,7 +129,7 @@ impl BatchQueue {
         future
     }
 
-    pub fn push_task_batch(&self, tasks: Vec<(*const (), TaskFn)>) -> WorkFuture {
+    pub fn push_task_batch(&self, tasks: &Vec<(*const (), TaskFn)>) -> WorkFuture {
         if tasks.is_empty() {
             return WorkFuture::new(0);
         }
@@ -138,7 +138,7 @@ impl BatchQueue {
 
         let work_items: Vec<WorkItem> = tasks
             .into_iter()
-            .map(|(params, task_fn)| WorkItem::new(params, task_fn))
+            .map(|(params, task_fn)| WorkItem::new(*params, *task_fn))
             .collect();
 
         self.push_batch(work_items, future.clone());

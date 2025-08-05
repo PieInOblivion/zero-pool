@@ -3,8 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 use zero_pool::{
-    self, zp_define_task_fn, zp_submit_batch_mixed, zp_submit_batch_uniform, zp_submit_task,
-    zp_task_params, zp_write,
+    self, zp_define_task_fn, zp_submit_batch_mixed, zp_task_params, zp_write
 };
 
 // define task parameter structures using the safe macro
@@ -199,7 +198,7 @@ fn test_basic_functionality() {
     let mut result = 0u64;
 
     let task = SimpleTask::new(1000, &mut result);
-    let future = zp_submit_task!(pool, task, simple_cpu_task);
+    let future = pool.submit_task(&task, simple_cpu_task);
     future.wait();
 
     assert_ne!(result, 0);
@@ -220,7 +219,7 @@ fn test_massive_simple_tasks() {
         .map(|result| SimpleTask::new(100, result))
         .collect();
 
-    let batch = zp_submit_batch_uniform!(pool, tasks, simple_cpu_task);
+    let batch = pool.submit_batch_uniform(&tasks, simple_cpu_task);
     batch.wait();
 
     let duration = start.elapsed();
@@ -284,7 +283,7 @@ fn test_empty_batch_submission() {
 
     // Test empty uniform batch
     let empty_tasks: Vec<SimpleTask> = Vec::new();
-    let empty_batch = zp_submit_batch_uniform!(pool, empty_tasks, simple_cpu_task);
+    let empty_batch = pool.submit_batch_uniform(&empty_tasks, simple_cpu_task);
 
     // Should complete immediately
     assert!(empty_batch.is_complete());
@@ -318,7 +317,7 @@ fn test_single_worker_behavior() {
         })
         .collect();
 
-    let batch = zp_submit_batch_uniform!(pool, tasks, simple_cpu_task);
+    let batch = pool.submit_batch_uniform(&tasks, simple_cpu_task);
 
     // Check queue lengths while work is potentially pending
     println!("Total pending: {}", pool.total_pending());
@@ -353,7 +352,7 @@ fn test_shutdown_and_cleanup() {
             .map(|result| SimpleTask::new(1000, result))
             .collect();
 
-        let batch = zp_submit_batch_uniform!(pool, tasks, simple_cpu_task);
+        let batch = pool.submit_batch_uniform(&tasks, simple_cpu_task);
 
         // Check pool stats
         println!("Total pending before wait: {}", pool.total_pending());
@@ -384,7 +383,7 @@ fn test_shutdown_and_cleanup() {
         let pool2 = zero_pool::new();
         let mut test_result = 0u64;
         let task = SimpleTask::new(100, &mut test_result);
-        let future = zp_submit_task!(pool2, task, simple_cpu_task);
+        let future = pool2.submit_task(&task, simple_cpu_task);
         future.wait();
         assert_ne!(test_result, 0);
         println!("New pool works correctly after previous cleanup");
@@ -409,7 +408,7 @@ fn test_pool_statistics() {
         })
         .collect();
 
-    let _batch = zp_submit_batch_uniform!(pool, tasks, simple_cpu_task);
+    let _batch = pool.submit_batch_uniform(&tasks, simple_cpu_task);
 
     // Check that work was queued
     let total_pending = pool.total_pending();
@@ -427,8 +426,6 @@ fn test_pool_statistics() {
 
 #[test]
 fn debug_test_single_task() {
-    println!("\n=== DEBUG: Single Task Test ===");
-
     println!("Creating pool...");
     let pool = zero_pool::new();
     println!("Pool created with {} workers", pool.worker_count());
@@ -437,7 +434,7 @@ fn debug_test_single_task() {
     let task = DebugTask::new(1, 1000, &mut result);
 
     println!("Submitting single task...");
-    let future = zp_submit_task!(pool, task, debug_task_fn);
+    let future = pool.submit_task(&task, debug_task_fn);
 
     println!("Waiting for task completion...");
     let start = Instant::now();
@@ -454,8 +451,6 @@ fn debug_test_single_task() {
 
 #[test]
 fn debug_test_small_batch() {
-    println!("\n=== DEBUG: Small Batch Test ===");
-
     println!("Creating pool...");
     let pool = zero_pool::new();
     println!("Pool created with {} workers", pool.worker_count());
@@ -475,7 +470,7 @@ fn debug_test_small_batch() {
 
     println!("Submitting batch...");
     let start = Instant::now();
-    let batch = zp_submit_batch_uniform!(pool, tasks, debug_task_fn);
+    let batch = pool.submit_batch_uniform(&tasks, debug_task_fn);
     println!("Batch submitted in {:?}", start.elapsed());
 
     println!("Waiting for batch completion...");
@@ -498,8 +493,6 @@ fn debug_test_small_batch() {
 
 #[test]
 fn debug_test_rapid_pools() {
-    println!("\n=== DEBUG: Rapid Pool Creation/Destruction ===");
-
     for iteration in 0..3 {
         println!("--- Iteration {} ---", iteration);
 
@@ -510,7 +503,7 @@ fn debug_test_rapid_pools() {
         let task = DebugTask::new(iteration, 500, &mut result);
 
         println!("Submitting task...");
-        let future = zp_submit_task!(pool, task, debug_task_fn);
+        let future = pool.submit_task(&task, debug_task_fn);
 
         println!("Waiting...");
         future.wait();
@@ -531,8 +524,6 @@ fn debug_test_rapid_pools() {
 
 #[test]
 fn debug_test_timeout_behavior() {
-    println!("\n=== DEBUG: Timeout Behavior Test ===");
-
     println!("Creating pool...");
     let pool = zero_pool::new();
 
@@ -540,7 +531,7 @@ fn debug_test_timeout_behavior() {
     let task = DebugTask::new(1, 1000, &mut result);
 
     println!("Submitting task...");
-    let future = zp_submit_task!(pool, task, debug_task_fn);
+    let future = pool.submit_task(&task, debug_task_fn);
 
     println!("Waiting with 5 second timeout...");
     let start = Instant::now();
@@ -564,14 +555,12 @@ fn debug_test_timeout_behavior() {
 
 #[test]
 fn debug_test_empty_batch() {
-    println!("\n=== DEBUG: Empty Batch Test ===");
-
     println!("Creating pool...");
     let pool = zero_pool::new();
 
     println!("Creating empty batch...");
     let empty_tasks: Vec<DebugTask> = Vec::new();
-    let batch = zp_submit_batch_uniform!(pool, empty_tasks, debug_task_fn);
+    let batch = pool.submit_batch_uniform(&empty_tasks, debug_task_fn);
 
     println!("Checking if empty batch is immediately complete...");
     assert!(
@@ -597,8 +586,6 @@ fn debug_test_empty_batch() {
 
 #[test]
 fn debug_test_worker_count_behavior() {
-    println!("\n=== DEBUG: Different Worker Count Test ===");
-
     for worker_count in [1, 2, 4] {
         println!("--- Testing with {} workers ---", worker_count);
 
@@ -620,7 +607,7 @@ fn debug_test_worker_count_behavior() {
             .collect();
 
         println!("Submitting batch...");
-        let batch = zp_submit_batch_uniform!(pool, tasks, debug_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, debug_task_fn);
 
         println!("Waiting for completion...");
         let start = Instant::now();
@@ -641,8 +628,7 @@ fn debug_test_worker_count_behavior() {
 
 #[test]
 fn debug_test_benchmark_simulation() {
-    println!("\n=== DEBUG: Benchmark Simulation Test ===");
-    println!("This simulates what criterion does - multiple iterations with the same pool");
+    // simulates what criterion does - multiple iterations with the same pool
 
     println!("Creating pool...");
     let pool = zero_pool::new();
@@ -660,7 +646,7 @@ fn debug_test_benchmark_simulation() {
             .collect();
 
         println!("Submitting batch of {} tasks...", task_count);
-        let batch = zp_submit_batch_uniform!(pool, tasks, debug_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, debug_task_fn);
 
         println!("Waiting for batch...");
         let start = Instant::now();
@@ -701,8 +687,6 @@ fn debug_test_benchmark_simulation() {
 
 #[test]
 fn debug_test_stress_rapid_batches() {
-    println!("\n=== DEBUG: Stress Test - Rapid Batches ===");
-
     println!("Creating pool...");
     let pool = zero_pool::new();
 
@@ -717,7 +701,7 @@ fn debug_test_stress_rapid_batches() {
             .collect();
 
         println!("Submitting stress batch {}...", batch_num);
-        let batch = zp_submit_batch_uniform!(pool, tasks, debug_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, debug_task_fn);
 
         println!("Waiting for stress batch {}...", batch_num);
         let start = Instant::now();
@@ -741,8 +725,6 @@ fn debug_test_stress_rapid_batches() {
 
 #[test]
 fn debug_benchmark_simple_small_exact() {
-    println!("\n=== DEBUG: Exact Simple Small Benchmark ===");
-
     println!("Creating pool (as in benchmark)...");
     let pool = zero_pool::new();
 
@@ -757,7 +739,7 @@ fn debug_benchmark_simple_small_exact() {
             .collect();
 
         let start = Instant::now();
-        let batch = zp_submit_batch_uniform!(pool, tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
 
         println!("  Waiting for batch {} completion...", iteration);
         let wait_start = Instant::now();
@@ -788,8 +770,6 @@ fn debug_benchmark_simple_small_exact() {
 
 #[test]
 fn debug_benchmark_simple_large_exact() {
-    println!("\n=== DEBUG: Exact Simple Large Benchmark ===");
-
     println!("Creating pool (as in benchmark)...");
     let pool = zero_pool::new();
 
@@ -804,7 +784,7 @@ fn debug_benchmark_simple_large_exact() {
             .collect();
 
         let start = Instant::now();
-        let batch = zp_submit_batch_uniform!(pool, tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
 
         println!("  Waiting for large batch {} completion...", iteration);
         let wait_start = Instant::now();
@@ -835,8 +815,6 @@ fn debug_benchmark_simple_large_exact() {
 
 #[test]
 fn debug_benchmark_complex_exact() {
-    println!("\n=== DEBUG: Exact Complex Benchmark ===");
-
     println!("Creating pool (as in benchmark)...");
     let pool = zero_pool::new();
 
@@ -850,7 +828,7 @@ fn debug_benchmark_complex_exact() {
             .collect();
 
         let start = Instant::now();
-        let batch = zp_submit_batch_uniform!(pool, tasks, complex_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, complex_task_fn);
 
         println!("  Waiting for complex batch {} completion...", iteration);
         let wait_start = Instant::now();
@@ -884,8 +862,6 @@ fn debug_benchmark_complex_exact() {
 
 #[test]
 fn debug_criterion_style_timing() {
-    println!("\n=== DEBUG: Criterion-style Timing Test ===");
-
     println!("Creating pool...");
     let pool = zero_pool::new();
 
@@ -900,7 +876,7 @@ fn debug_criterion_style_timing() {
             .map(|result| SimpleTask::new(100, result))
             .collect();
 
-        let batch = zp_submit_batch_uniform!(pool, tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
         let completed = batch.wait_timeout(Duration::from_secs(10));
 
         if !completed {
@@ -924,7 +900,7 @@ fn debug_criterion_style_timing() {
             .collect();
 
         let start = Instant::now();
-        let batch = zp_submit_batch_uniform!(pool, tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
         let completed = batch.wait_timeout(Duration::from_secs(10));
         let duration = start.elapsed();
 
@@ -946,8 +922,6 @@ fn debug_criterion_style_timing() {
 
 #[test]
 fn debug_memory_pressure_test() {
-    println!("\n=== DEBUG: Memory Pressure Test ===");
-
     println!("Creating pool...");
     let pool = zero_pool::new();
 
@@ -963,7 +937,7 @@ fn debug_memory_pressure_test() {
             .map(|result| SimpleTask::new(500, result))
             .collect();
 
-        let batch = zp_submit_batch_uniform!(pool, tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
         let completed = batch.wait_timeout(Duration::from_secs(15));
 
         if !completed {
@@ -989,8 +963,6 @@ fn debug_memory_pressure_test() {
 
 #[test]
 fn debug_exact_benchmark_reproduction() {
-    println!("\n=== DEBUG: Exact Benchmark Code Reproduction ===");
-
     // This exactly mirrors your benchmark structure
     println!("Creating pool outside iteration loop...");
     let pool = zero_pool::new();
@@ -1013,7 +985,7 @@ fn debug_exact_benchmark_reproduction() {
             .map(|result| SimpleTask::new(100, result))
             .collect();
 
-        let batch = zp_submit_batch_uniform!(pool, tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
 
         // Use timeout to catch hangs
         let completed = batch.wait_timeout(Duration::from_secs(5));
@@ -1033,4 +1005,278 @@ fn debug_exact_benchmark_reproduction() {
     println!("Exact benchmark reproduction completed successfully!");
     drop(pool);
     println!("Pool dropped successfully");
+}
+
+#[test]
+fn test_optimized_uniform_batch() {
+    let pool = zero_pool::new();
+    let task_count = 1000;
+    let mut results = vec![0u64; task_count];
+
+    println!("Creating {} tasks for optimized uniform batch...", task_count);
+    let tasks: Vec<_> = results
+        .iter_mut()
+        .map(|result| SimpleTask::new(100, result))
+        .collect();
+
+    // Convert to optimized format
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, simple_task_fn);
+    
+    println!("Submitting optimized uniform batch...");
+    let start = Instant::now();
+    let batch = pool.submit_raw_task_batch(&tasks_converted);
+    batch.wait();
+    let duration = start.elapsed();
+
+    println!("Optimized uniform batch completed in {:?}", duration);
+
+    // Verify all tasks completed
+    let completed_count = results.iter().filter(|&&r| r != 0).count();
+    println!("Completed tasks: {} / {}", completed_count, task_count);
+    assert_eq!(completed_count, task_count, "Not all optimized tasks completed");
+}
+
+#[test]
+fn test_optimized_vs_normal_uniform_equivalence() {
+    let pool = zero_pool::new();
+    let task_count = 500;
+    
+    // Test normal API
+    let mut normal_results = vec![0u64; task_count];
+    let normal_tasks: Vec<_> = normal_results
+        .iter_mut()
+        .map(|result| SimpleTask::new(123, result))
+        .collect();
+    
+    println!("Running normal uniform batch...");
+    let normal_start = Instant::now();
+    let normal_batch = pool.submit_batch_uniform(&normal_tasks, simple_task_fn);
+    normal_batch.wait();
+    let normal_duration = normal_start.elapsed();
+    
+    // Test optimized API with same work
+    let mut optimized_results = vec![0u64; task_count];
+    let optimized_tasks: Vec<_> = optimized_results
+        .iter_mut()
+        .map(|result| SimpleTask::new(123, result))
+        .collect();
+    
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&optimized_tasks, simple_task_fn);
+    
+    println!("Running optimized uniform batch...");
+    let optimized_start = Instant::now();
+    let optimized_batch = pool.submit_raw_task_batch(&tasks_converted);
+    optimized_batch.wait();
+    let optimized_duration = optimized_start.elapsed();
+    
+    println!("Normal API duration: {:?}", normal_duration);
+    println!("Optimized API duration: {:?}", optimized_duration);
+    
+    // Verify results are identical
+    assert_eq!(normal_results.len(), optimized_results.len());
+    for (i, (&normal, &optimized)) in normal_results.iter().zip(optimized_results.iter()).enumerate() {
+        assert_eq!(normal, optimized, "Result mismatch at index {}: normal={}, optimized={}", i, normal, optimized);
+    }
+    
+    println!("Results are identical between normal and optimized APIs");
+}
+
+#[test]
+fn test_optimized_mixed_batch() {
+    let pool = zero_pool::new();
+    
+    // Prepare different types of tasks
+    let mut simple_result = 0u64;
+    let simple_task = SimpleTask::new(50000, &mut simple_result);
+
+    let mut prime_result = false;
+    let prime_task = PrimeTask::new(982451653, &mut prime_result);
+
+    let mut matrix_result = 0.0f64;
+    let matrix_task = MatrixTask::new(50, &mut matrix_result);
+
+    let mut sort_data = Vec::new();
+    let sort_task = SortTask::new(1000, &mut sort_data);
+
+    println!("Converting mixed tasks to optimized format...");
+    let mixed_tasks = vec![
+        (&simple_task as *const _ as *const (), simple_cpu_task as zero_pool::TaskFn),
+        (&prime_task as *const _ as *const (), is_prime_task as zero_pool::TaskFn),
+        (&matrix_task as *const _ as *const (), matrix_multiply_task as zero_pool::TaskFn),
+        (&sort_task as *const _ as *const (), sort_data_task as zero_pool::TaskFn),
+    ];
+    
+    println!("Submitting optimized mixed batch...");
+    let start = Instant::now();
+    let batch = pool.submit_raw_task_batch(&mixed_tasks);
+    batch.wait();
+    let duration = start.elapsed();
+
+    println!("Optimized mixed batch completed in {:?}", duration);
+
+    // Verify all tasks completed
+    assert_ne!(simple_result, 0, "Simple task did not complete");
+    assert_ne!(matrix_result, 0.0, "Matrix task did not complete");
+    assert!(!sort_data.is_empty(), "Sort task did not complete");
+    
+    println!("Simple task result: {}", simple_result);
+    println!("Prime check result: {}", prime_result);
+    println!("Matrix result: {}", matrix_result);
+    println!("Sort result length: {}", sort_data.len());
+}
+
+#[test]
+fn test_optimized_vs_normal_mixed_equivalence() {
+    let pool = zero_pool::new();
+    
+    // Test normal mixed API
+    let mut normal_simple_result = 0u64;
+    let normal_simple_task = SimpleTask::new(12345, &mut normal_simple_result);
+
+    let mut normal_prime_result = false;
+    let normal_prime_task = PrimeTask::new(97, &mut normal_prime_result);
+
+    println!("Running normal mixed batch...");
+    let normal_start = Instant::now();
+    let normal_batch = zero_pool::zp_submit_batch_mixed!(
+        pool,
+        [
+            (&normal_simple_task, simple_cpu_task),
+            (&normal_prime_task, is_prime_task),
+        ]
+    );
+    normal_batch.wait();
+    let normal_duration = normal_start.elapsed();
+    
+    // Test optimized mixed API with same work
+    let mut optimized_simple_result = 0u64;
+    let optimized_simple_task = SimpleTask::new(12345, &mut optimized_simple_result);
+
+    let mut optimized_prime_result = false;
+    let optimized_prime_task = PrimeTask::new(97, &mut optimized_prime_result);
+
+    let mixed_tasks = vec![
+        (&optimized_simple_task as *const _ as *const (), simple_cpu_task as zero_pool::TaskFn),
+        (&optimized_prime_task as *const _ as *const (), is_prime_task as zero_pool::TaskFn),
+    ];
+    
+    println!("Running optimized mixed batch...");
+    let optimized_start = Instant::now();
+    let optimized_batch = pool.submit_raw_task_batch(&mixed_tasks);
+    optimized_batch.wait();
+    let optimized_duration = optimized_start.elapsed();
+    
+    println!("Normal mixed API duration: {:?}", normal_duration);
+    println!("Optimized mixed API duration: {:?}", optimized_duration);
+    
+    // Verify results are identical
+    assert_eq!(normal_simple_result, optimized_simple_result, 
+               "Simple task results differ: normal={}, optimized={}", 
+               normal_simple_result, optimized_simple_result);
+    assert_eq!(normal_prime_result, optimized_prime_result,
+               "Prime task results differ: normal={}, optimized={}", 
+               normal_prime_result, optimized_prime_result);
+    
+    println!("Results are identical between normal and optimized mixed APIs");
+}
+
+#[test]
+fn test_optimized_empty_batch() {
+    let pool = zero_pool::new();
+    
+    // Test empty optimized uniform batch
+    let empty_tasks: Vec<SimpleTask> = Vec::new();
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&empty_tasks, simple_task_fn);
+    
+    println!("Submitting empty optimized uniform batch...");
+    let batch = pool.submit_raw_task_batch(&tasks_converted);
+    assert!(batch.is_complete(), "Empty optimized batch should be immediately complete");
+    batch.wait();
+    
+    // Test empty optimized mixed batch
+    let empty_mixed_converted: Vec<(*const (), zero_pool::TaskFn)> = Vec::new();
+    
+    println!("Submitting empty optimized mixed batch...");
+    let empty_mixed_batch = pool.submit_raw_task_batch(&empty_mixed_converted);
+    assert!(empty_mixed_batch.is_complete(), "Empty optimized mixed batch should be immediately complete");
+    empty_mixed_batch.wait();
+    
+    println!("Empty optimized batch tests completed successfully");
+}
+
+#[test]
+fn test_optimized_reuse_pattern() {
+    let pool = zero_pool::new();
+    let task_count = 100;
+    
+    // Create tasks once and reuse the converted pointers (like in benchmarks)
+    let mut results = vec![0u64; task_count];
+    let tasks: Vec<_> = results
+        .iter_mut()
+        .map(|result| SimpleTask::new(500, result))
+        .collect();
+    
+    // Convert once, reuse multiple times
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, simple_task_fn);
+    
+    println!("Running {} iterations with reused optimized tasks...", 10);
+    for iteration in 0..10 {
+        println!("Reuse iteration {}", iteration);
+        
+        // Clear previous results
+        for result in results.iter_mut() {
+            *result = 0;
+        }
+        
+        let start = Instant::now();
+        let batch = pool.submit_raw_task_batch(&tasks_converted);
+        batch.wait();
+        let duration = start.elapsed();
+        
+        println!("  Iteration {} completed in {:?}", iteration, duration);
+        
+        // Verify all tasks completed
+        let completed_count = results.iter().filter(|&&r| r != 0).count();
+        assert_eq!(completed_count, task_count, 
+                   "Not all tasks completed in reuse iteration {}", iteration);
+        
+        black_box(results.clone());
+    }
+    
+    println!("Optimized task reuse pattern test completed successfully");
+}
+
+#[test]
+fn test_optimized_stress_test() {
+    let pool = zero_pool::new();
+    
+    for batch_num in 0..20 {
+        println!("Optimized stress batch {}", batch_num);
+        
+        let mut results = vec![0u64; 200];
+        let tasks: Vec<_> = results
+            .iter_mut()
+            .enumerate()
+            .map(|(i, result)| SimpleTask::new(100 + i * 10, result))
+            .collect();
+        
+        let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, simple_task_fn);
+        
+        let start = Instant::now();
+        let batch = pool.submit_raw_task_batch(&tasks_converted);
+        let completed = batch.wait_timeout(Duration::from_secs(10));
+        let duration = start.elapsed();
+        
+        if !completed {
+            panic!("Optimized stress test hang at batch {}", batch_num);
+        }
+        
+        println!("  Optimized stress batch {} completed in {:?}", batch_num, duration);
+        
+        // Verify all completed
+        let completed_count = results.iter().filter(|&&r| r != 0).count();
+        assert_eq!(completed_count, 200, "Not all optimized stress tasks completed in batch {}", batch_num);
+    }
+    
+    println!("Optimized stress test completed successfully");
 }

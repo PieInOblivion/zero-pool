@@ -38,3 +38,11 @@ pub fn new() -> ThreadPool {
 pub fn with_workers(worker_count: usize) -> ThreadPool {
     ThreadPool::new(worker_count)
 }
+
+// Convert uniform tasks to pointer format
+pub fn uniform_tasks_to_pointers<T>(params_vec: &[T], task_fn: TaskFn) -> Vec<(*const (), TaskFn)> {
+    params_vec
+        .iter()
+        .map(|params| (params as *const T as *const (), task_fn))
+        .collect()
+}
