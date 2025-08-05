@@ -45,6 +45,7 @@ pub fn with_workers(worker_count: usize) -> ThreadPool {
 }
 
 // Convert uniform tasks to pointer format
+#[inline]
 pub fn uniform_tasks_to_pointers<T>(task_fn: TaskFnPointer, params_vec: &[T]) -> Vec<WorkItem> {
     params_vec
         .iter()
