@@ -22,17 +22,17 @@ impl ThreadPool {
         ThreadPool { workers, queue }
     }
 
-    pub fn submit_raw_task(&self, params: TaskParamPointer, task_fn: TaskFnPointer) -> WorkFuture {
-        self.queue.push_single_task(params, task_fn)
+    pub fn submit_raw_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> WorkFuture {
+        self.queue.push_single_task(task_fn, params)
     }
 
     pub fn submit_raw_task_batch(&self, tasks: &Vec<WorkItem>) -> WorkFuture {
         self.queue.push_task_batch(tasks)
     }
 
-    pub fn submit_task<T>(&self, params: &T, task_fn: TaskFnPointer) -> WorkFuture {
+    pub fn submit_task<T>(&self, task_fn: TaskFnPointer, params: &T) -> WorkFuture {
         let params_ptr = params as *const T as TaskParamPointer;
-        self.submit_raw_task(params_ptr, task_fn)
+        self.submit_raw_task(task_fn, params_ptr)
     }
 
     pub fn submit_batch_uniform<T>(&self, task_fn: TaskFnPointer, params_vec: &[T]) -> WorkFuture {

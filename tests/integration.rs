@@ -198,7 +198,7 @@ fn test_basic_functionality() {
     let mut result = 0u64;
 
     let task = SimpleTask::new(1000, &mut result);
-    let future = pool.submit_task(&task, simple_cpu_task);
+    let future = pool.submit_task(simple_cpu_task, &task);
     future.wait();
 
     assert_ne!(result, 0);
@@ -383,7 +383,7 @@ fn test_shutdown_and_cleanup() {
         let pool2 = zero_pool::new();
         let mut test_result = 0u64;
         let task = SimpleTask::new(100, &mut test_result);
-        let future = pool2.submit_task(&task, simple_cpu_task);
+        let future = pool2.submit_task(simple_cpu_task, &task);
         future.wait();
         assert_ne!(test_result, 0);
         println!("New pool works correctly after previous cleanup");
@@ -434,7 +434,7 @@ fn debug_test_single_task() {
     let task = DebugTask::new(1, 1000, &mut result);
 
     println!("Submitting single task...");
-    let future = pool.submit_task(&task, debug_task_fn);
+    let future = pool.submit_task(debug_task_fn, &task);
 
     println!("Waiting for task completion...");
     let start = Instant::now();
@@ -503,7 +503,7 @@ fn debug_test_rapid_pools() {
         let task = DebugTask::new(iteration, 500, &mut result);
 
         println!("Submitting task...");
-        let future = pool.submit_task(&task, debug_task_fn);
+        let future = pool.submit_task(debug_task_fn, &task);
 
         println!("Waiting...");
         future.wait();
@@ -531,7 +531,7 @@ fn debug_test_timeout_behavior() {
     let task = DebugTask::new(1, 1000, &mut result);
 
     println!("Submitting task...");
-    let future = pool.submit_task(&task, debug_task_fn);
+    let future = pool.submit_task(debug_task_fn, &task);
 
     println!("Waiting with 5 second timeout...");
     let start = Instant::now();

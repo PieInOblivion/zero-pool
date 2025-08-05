@@ -123,7 +123,7 @@ impl BatchQueue {
         self.shutdown.load(Ordering::Acquire)
     }
 
-    pub fn push_single_task(&self, params: TaskParamPointer, task_fn: TaskFnPointer) -> WorkFuture {
+    pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> WorkFuture {
         let future = WorkFuture::new(1);
         self.push_batch(vec![(task_fn, params)], future.clone());
         future

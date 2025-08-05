@@ -20,8 +20,18 @@ Since the library uses raw pointers, you must ensure parameter structs remain va
 
 ## Benchmarks
 ```rust
-test bench_indexed_computation_rayon    ... bench:      40,207.46 ns/iter (+/- 12,351.30)
-test bench_indexed_computation_zeropool ... bench:      55,780.15 ns/iter (+/- 3,830.86)
+test bench_heavy_compute_rayon                    ... bench:   4,603,636.30 ns/iter (+/- 1,136,989.90)
+test bench_heavy_compute_rayon_optimised          ... bench:   4,717,107.05 ns/iter (+/- 543,230.30)
+test bench_heavy_compute_zeropool                 ... bench:   4,452,526.65 ns/iter (+/- 324,145.21)
+test bench_heavy_compute_zeropool_optimised       ... bench:   4,452,946.25 ns/iter (+/- 428,962.23)
+test bench_indexed_computation_rayon              ... bench:      40,252.28 ns/iter (+/- 11,205.40)
+test bench_indexed_computation_rayon_optimised    ... bench:      36,253.01 ns/iter (+/- 8,549.85)
+test bench_indexed_computation_zeropool           ... bench:      56,816.65 ns/iter (+/- 4,184.89)
+test bench_indexed_computation_zeropool_optimised ... bench:      44,698.34 ns/iter (+/- 7,569.20)
+test bench_task_overhead_rayon                    ... bench:      38,299.19 ns/iter (+/- 15,829.05)
+test bench_task_overhead_rayon_optimised          ... bench:      40,375.70 ns/iter (+/- 10,038.56)
+test bench_task_overhead_zeropool                 ... bench:      54,389.11 ns/iter (+/- 3,294.83)
+test bench_task_overhead_zeropool_optimised       ... bench:      43,955.16 ns/iter (+/- 7,306.55)
 ```
 
 ## Example Usage
@@ -107,41 +117,73 @@ let tasks: Vec<_> = (0..100).map(|i| {
     BatchTask::new(i, 1000, &mut results)
 }).collect();
 
-let batch = zp_submit_batch_uniform!(pool, tasks, batch_task);
+let batch = pool.submit_batch_uniform(batch_task, &tasks);
 batch.wait();
 ```
 
-### `zp_submit_task!`
-
-Submits a single task to the thread pool.
+### Submitting a Single Task
 
 ```rust
-use zero_pool::zp_submit_task;
+use zero_pool::{zp_task_params, zp_define_task_fn, zp_write};
+
+zp_task_params! {
+    MyTask {
+        iterations: usize,
+        result: *mut u64,
+    }
+}
+
+zp_define_task_fn!(my_task, MyTask, |params| {
+    let mut sum = 0u64;
+    for i in 0..params.iterations {
+        sum += i as u64;
+    }
+    zp_write!(params.result, sum);
+});
 
 let pool = zero_pool::new();
 let mut result = 0u64;
 let task = MyTask::new(1000, &mut result);
 
-let future = zp_submit_task!(pool, task, my_task);
+let future = pool.submit_task(&task, my_task);
 future.wait();
+
+println!("Result: {}", result);
 ```
 
-### `zp_submit_batch_uniform!`
+### Submitting Uniform Batches
 
 Submits multiple tasks of the same type to the thread pool.
 
 ```rust
-use zero_pool::zp_submit_batch_uniform;
+use zero_pool::{zp_task_params, zp_define_task_fn, zp_write};
+
+zp_task_params! {
+    ComputeTask {
+        work_amount: usize,
+        result: *mut u64,
+    }
+}
+
+zp_define_task_fn!(compute_task, ComputeTask, |params| {
+    let mut sum = 0u64;
+    for i in 0..params.work_amount {
+        sum += i as u64;
+    }
+    zp_write!(params.result, sum);
+});
 
 let pool = zero_pool::new();
 let mut results = vec![0u64; 100];
 
-let tasks: Vec<_> = results.iter_mut().map(|result| {
-    MyTask::new(1000, result)
+let tasks: Vec<_> = results.iter_mut().enumerate().map(|(i, result)| {
+    ComputeTask::new(1000 + i * 10, result)
 }).collect();
 
-let batch = zp_submit_batch_uniform!(pool, tasks, my_task);
+let batch = pool.submit_batch_uniform(compute_task, &tasks);
 batch.wait();
+
+println!("First result: {}", results[0]);
 ```
 
 ### `zp_submit_batch_mixed!`
@@ -149,19 +191,88 @@ batch.wait();
 Submits multiple tasks of different types to the thread pool.
 
 ```rust
-use zero_pool::zp_submit_batch_mixed;
+use zero_pool::{zp_submit_batch_mixed, zp_task_params, zp_define_task_fn, zp_write};
 
-// Assume we have another task type called OtherTask with other_task function
+// First task type
+zp_task_params! {
+    AddTask {
+        a: u64,
+        b: u64,
+        result: *mut u64,
+    }
+}
+
+zp_define_task_fn!(add_task, AddTask, |params| {
+    zp_write!(params.result, params.a + params.b);
+});
+
+// Second task type
+zp_task_params! {
+    MultiplyTask {
+        x: u64,
+        y: u64,
+        result: *mut u64,
+    }
+}
+
+zp_define_task_fn!(multiply_task, MultiplyTask, |params| {
+    zp_write!(params.result, params.x * params.y);
+});
+
 let pool = zero_pool::new();
-let mut result1 = 0u64;
-let mut result2 = 0u64;
+let mut add_result = 0u64;
+let mut multiply_result = 0u64;
 
-let task1 = MyTask::new(1000, &mut result1);
-let task2 = OtherTask::new(42, &mut result2);
+let add = AddTask::new(5, 3, &mut add_result);
+let multiply = MultiplyTask::new(4, 7, &mut multiply_result);
 
 let batch = zp_submit_batch_mixed!(pool, [
-    (task1, my_task),
-    (task2, other_task),
+    (&add, add_task),
+    (&multiply, multiply_task),
 ]);
 batch.wait();
+
+println!("5 + 3 = {}", add_result);
+println!("4 * 7 = {}", multiply_result);
+```
+
+### Performance Optimization: Pre-converted Tasks
+
+For hot paths where you submit the same tasks repeatedly, you can pre-convert tasks to avoid repeated pointer conversions:
+
+```rust
+use zero_pool::{zp_task_params, zp_define_task_fn, zp_write};
+
+zp_task_params! {
+    HotTask {
+        work: usize,
+        result: *mut u64,
+    }
+}
+
+zp_define_task_fn!(hot_task_fn, HotTask, |params| {
+    let mut sum = 0u64;
+    for i in 0..params.work {
+        sum = sum.wrapping_add(i as u64);
+    }
+    zp_write!(params.result, sum);
+});
+
+let pool = zero_pool::new();
+let mut results = vec![0u64; 100];
+
+// Create tasks once
+let tasks: Vec<_> = results.iter_mut().map(|result| {
+    HotTask::new(1000, result)
+}).collect();
+
+// Convert once, reuse many times
+let tasks_converted = zero_pool::uniform_tasks_to_pointers(hot_task_fn, &tasks);
+
+// Submit multiple times with zero conversion overhead
+for _ in 0..10 {
+    results.fill(0); // Reset results
+    let batch = pool.submit_raw_task_batch(&tasks_converted);
+    batch.wait();
+}
 ```
