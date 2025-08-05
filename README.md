@@ -1,4 +1,4 @@
-# Zero-Pool: Zero-Allocation Thread Pool
+# Zero-Pool: Consistent High-Performance Thread Pool
 *When microseconds matter and allocation is the enemy.*
 
 This is an experimental thread pool implementation focused on exploring lock-free MPMC queue techniques and zero-allocation task dispatch. Consider this a performance playground rather than a production-ready library.
