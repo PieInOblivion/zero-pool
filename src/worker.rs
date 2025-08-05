@@ -22,7 +22,7 @@ impl Worker {
                     // once woken up, greedily drain ALL available work
                     while let Some((work_item, batch_future)) = queue.claim_work() {
                         // call the task function with raw parameters
-                        (work_item.task_fn)(work_item.params);
+                        (work_item.0)(work_item.1);
                         batch_future.complete_one();
                     }
 

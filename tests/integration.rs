@@ -3,8 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 use zero_pool::{
-    self, TaskFnPointer, TaskParamPointer, zp_define_task_fn, zp_submit_batch_mixed,
-    zp_task_params, zp_write,
+    self, zp_define_task_fn, zp_submit_batch_mixed, zp_task_params, zp_write, TaskFnPointer, TaskParamPointer, WorkItem
 };
 
 // define task parameter structures using the safe macro
@@ -220,7 +219,7 @@ fn test_massive_simple_tasks() {
         .map(|result| SimpleTask::new(100, result))
         .collect();
 
-    let batch = pool.submit_batch_uniform(&tasks, simple_cpu_task);
+    let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
     batch.wait();
 
     let duration = start.elapsed();
@@ -284,7 +283,7 @@ fn test_empty_batch_submission() {
 
     // Test empty uniform batch
     let empty_tasks: Vec<SimpleTask> = Vec::new();
-    let empty_batch = pool.submit_batch_uniform(&empty_tasks, simple_cpu_task);
+    let empty_batch = pool.submit_batch_uniform(simple_cpu_task, &empty_tasks);
 
     // Should complete immediately
     assert!(empty_batch.is_complete());
@@ -318,7 +317,7 @@ fn test_single_worker_behavior() {
         })
         .collect();
 
-    let batch = pool.submit_batch_uniform(&tasks, simple_cpu_task);
+    let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
 
     // Check queue lengths while work is potentially pending
     println!("Total pending: {}", pool.total_pending());
@@ -353,7 +352,7 @@ fn test_shutdown_and_cleanup() {
             .map(|result| SimpleTask::new(1000, result))
             .collect();
 
-        let batch = pool.submit_batch_uniform(&tasks, simple_cpu_task);
+        let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
 
         // Check pool stats
         println!("Total pending before wait: {}", pool.total_pending());
@@ -409,7 +408,7 @@ fn test_pool_statistics() {
         })
         .collect();
 
-    let _batch = pool.submit_batch_uniform(&tasks, simple_cpu_task);
+    let _batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
 
     // Check that work was queued
     let total_pending = pool.total_pending();
@@ -471,7 +470,7 @@ fn debug_test_small_batch() {
 
     println!("Submitting batch...");
     let start = Instant::now();
-    let batch = pool.submit_batch_uniform(&tasks, debug_task_fn);
+    let batch = pool.submit_batch_uniform(debug_task_fn, &tasks);
     println!("Batch submitted in {:?}", start.elapsed());
 
     println!("Waiting for batch completion...");
@@ -561,7 +560,7 @@ fn debug_test_empty_batch() {
 
     println!("Creating empty batch...");
     let empty_tasks: Vec<DebugTask> = Vec::new();
-    let batch = pool.submit_batch_uniform(&empty_tasks, debug_task_fn);
+    let batch = pool.submit_batch_uniform(debug_task_fn, &empty_tasks);
 
     println!("Checking if empty batch is immediately complete...");
     assert!(
@@ -608,7 +607,7 @@ fn debug_test_worker_count_behavior() {
             .collect();
 
         println!("Submitting batch...");
-        let batch = pool.submit_batch_uniform(&tasks, debug_task_fn);
+        let batch = pool.submit_batch_uniform(debug_task_fn, &tasks);
 
         println!("Waiting for completion...");
         let start = Instant::now();
@@ -647,7 +646,7 @@ fn debug_test_benchmark_simulation() {
             .collect();
 
         println!("Submitting batch of {} tasks...", task_count);
-        let batch = pool.submit_batch_uniform(&tasks, debug_task_fn);
+        let batch = pool.submit_batch_uniform(debug_task_fn, &tasks);
 
         println!("Waiting for batch...");
         let start = Instant::now();
@@ -702,7 +701,7 @@ fn debug_test_stress_rapid_batches() {
             .collect();
 
         println!("Submitting stress batch {}...", batch_num);
-        let batch = pool.submit_batch_uniform(&tasks, debug_task_fn);
+        let batch = pool.submit_batch_uniform(debug_task_fn, &tasks);
 
         println!("Waiting for stress batch {}...", batch_num);
         let start = Instant::now();
@@ -740,7 +739,7 @@ fn debug_benchmark_simple_small_exact() {
             .collect();
 
         let start = Instant::now();
-        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(simple_task_fn, &tasks);
 
         println!("  Waiting for batch {} completion...", iteration);
         let wait_start = Instant::now();
@@ -785,7 +784,7 @@ fn debug_benchmark_simple_large_exact() {
             .collect();
 
         let start = Instant::now();
-        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(simple_task_fn, &tasks);
 
         println!("  Waiting for large batch {} completion...", iteration);
         let wait_start = Instant::now();
@@ -829,7 +828,7 @@ fn debug_benchmark_complex_exact() {
             .collect();
 
         let start = Instant::now();
-        let batch = pool.submit_batch_uniform(&tasks, complex_task_fn);
+        let batch = pool.submit_batch_uniform(complex_task_fn, &tasks);
 
         println!("  Waiting for complex batch {} completion...", iteration);
         let wait_start = Instant::now();
@@ -877,7 +876,7 @@ fn debug_criterion_style_timing() {
             .map(|result| SimpleTask::new(100, result))
             .collect();
 
-        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(simple_task_fn, &tasks);
         let completed = batch.wait_timeout(Duration::from_secs(10));
 
         if !completed {
@@ -901,7 +900,7 @@ fn debug_criterion_style_timing() {
             .collect();
 
         let start = Instant::now();
-        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(simple_task_fn, &tasks);
         let completed = batch.wait_timeout(Duration::from_secs(10));
         let duration = start.elapsed();
 
@@ -938,7 +937,7 @@ fn debug_memory_pressure_test() {
             .map(|result| SimpleTask::new(500, result))
             .collect();
 
-        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(simple_task_fn, &tasks);
         let completed = batch.wait_timeout(Duration::from_secs(15));
 
         if !completed {
@@ -986,7 +985,7 @@ fn debug_exact_benchmark_reproduction() {
             .map(|result| SimpleTask::new(100, result))
             .collect();
 
-        let batch = pool.submit_batch_uniform(&tasks, simple_task_fn);
+        let batch = pool.submit_batch_uniform(simple_task_fn, &tasks);
 
         // Use timeout to catch hangs
         let completed = batch.wait_timeout(Duration::from_secs(5));
@@ -1024,7 +1023,7 @@ fn test_optimized_uniform_batch() {
         .collect();
 
     // Convert to optimized format
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, simple_task_fn);
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(simple_task_fn, &tasks);
 
     println!("Submitting optimized uniform batch...");
     let start = Instant::now();
@@ -1057,7 +1056,7 @@ fn test_optimized_vs_normal_uniform_equivalence() {
 
     println!("Running normal uniform batch...");
     let normal_start = Instant::now();
-    let normal_batch = pool.submit_batch_uniform(&normal_tasks, simple_task_fn);
+    let normal_batch = pool.submit_batch_uniform(simple_task_fn, &normal_tasks);
     normal_batch.wait();
     let normal_duration = normal_start.elapsed();
 
@@ -1068,7 +1067,7 @@ fn test_optimized_vs_normal_uniform_equivalence() {
         .map(|result| SimpleTask::new(123, result))
         .collect();
 
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&optimized_tasks, simple_task_fn);
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(simple_task_fn, &optimized_tasks);
 
     println!("Running optimized uniform batch...");
     let optimized_start = Instant::now();
@@ -1116,20 +1115,20 @@ fn test_optimized_mixed_batch() {
     println!("Converting mixed tasks to optimized format...");
     let mixed_tasks = vec![
         (
-            &simple_task as *const _ as TaskParamPointer,
             simple_cpu_task as TaskFnPointer,
+            &simple_task as *const _ as TaskParamPointer,
         ),
         (
-            &prime_task as *const _ as TaskParamPointer,
             is_prime_task as TaskFnPointer,
+            &prime_task as *const _ as TaskParamPointer,
         ),
         (
-            &matrix_task as *const _ as TaskParamPointer,
             matrix_multiply_task as TaskFnPointer,
+            &matrix_task as *const _ as TaskParamPointer,
         ),
         (
-            &sort_task as *const _ as TaskParamPointer,
             sort_data_task as TaskFnPointer,
+            &sort_task as *const _ as TaskParamPointer,
         ),
     ];
 
@@ -1184,12 +1183,12 @@ fn test_optimized_vs_normal_mixed_equivalence() {
 
     let mixed_tasks = vec![
         (
-            &optimized_simple_task as *const _ as TaskParamPointer,
             simple_cpu_task as TaskFnPointer,
+            &optimized_simple_task as *const _ as TaskParamPointer,
         ),
         (
-            &optimized_prime_task as *const _ as TaskParamPointer,
             is_prime_task as TaskFnPointer,
+            &optimized_prime_task as *const _ as TaskParamPointer,
         ),
     ];
 
@@ -1223,7 +1222,7 @@ fn test_optimized_empty_batch() {
 
     // Test empty optimized uniform batch
     let empty_tasks: Vec<SimpleTask> = Vec::new();
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&empty_tasks, simple_task_fn);
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(simple_task_fn, &empty_tasks);
 
     println!("Submitting empty optimized uniform batch...");
     let batch = pool.submit_raw_task_batch(&tasks_converted);
@@ -1234,7 +1233,7 @@ fn test_optimized_empty_batch() {
     batch.wait();
 
     // Test empty optimized mixed batch
-    let empty_mixed_converted: Vec<(TaskParamPointer, TaskFnPointer)> = Vec::new();
+    let empty_mixed_converted: Vec<WorkItem> = Vec::new();
 
     println!("Submitting empty optimized mixed batch...");
     let empty_mixed_batch = pool.submit_raw_task_batch(&empty_mixed_converted);
@@ -1260,7 +1259,7 @@ fn test_optimized_reuse_pattern() {
         .collect();
 
     // Convert once, reuse multiple times
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, simple_task_fn);
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(simple_task_fn, &tasks);
 
     println!("Running {} iterations with reused optimized tasks...", 10);
     for iteration in 0..10 {
@@ -1306,7 +1305,7 @@ fn test_optimized_stress_test() {
             .map(|(i, result)| SimpleTask::new(100 + i * 10, result))
             .collect();
 
-        let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, simple_task_fn);
+        let tasks_converted = zero_pool::uniform_tasks_to_pointers(simple_task_fn, &tasks);
 
         let start = Instant::now();
         let batch = pool.submit_raw_task_batch(&tasks_converted);

@@ -1,7 +1,7 @@
-use crate::TaskParamPointer;
 use crate::padded_type::PaddedAtomicPtr;
 use crate::work_batch::WorkBatch;
-use crate::{TaskFnPointer, future::WorkFuture, work_item::WorkItem};
+use crate::{TaskFnPointer, future::WorkFuture};
+use crate::{TaskParamPointer, WorkItem};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 
@@ -125,24 +125,18 @@ impl BatchQueue {
 
     pub fn push_single_task(&self, params: TaskParamPointer, task_fn: TaskFnPointer) -> WorkFuture {
         let future = WorkFuture::new(1);
-        let work_item = WorkItem::new(params, task_fn);
-        self.push_batch(vec![work_item], future.clone());
+        self.push_batch(vec![(task_fn, params)], future.clone());
         future
     }
 
-    pub fn push_task_batch(&self, tasks: &Vec<(TaskParamPointer, TaskFnPointer)>) -> WorkFuture {
+    pub fn push_task_batch(&self, tasks: &Vec<WorkItem>) -> WorkFuture {
         if tasks.is_empty() {
             return WorkFuture::new(0);
         }
 
         let future = WorkFuture::new(tasks.len());
 
-        let work_items: Vec<WorkItem> = tasks
-            .into_iter()
-            .map(|(params, task_fn)| WorkItem::new(*params, *task_fn))
-            .collect();
-
-        self.push_batch(work_items, future.clone());
+        self.push_batch(tasks.clone(), future.clone());
         future
     }
 }

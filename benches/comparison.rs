@@ -61,7 +61,7 @@ fn bench_indexed_computation_zeropool(b: &mut Bencher) {
         }
 
         // submit uniform batch and wait for completion
-        let batch = pool.submit_batch_uniform(&tasks, compute_task_fn);
+        let batch = pool.submit_batch_uniform(compute_task_fn, &tasks);
         batch.wait();
 
         black_box(results);
@@ -105,7 +105,7 @@ fn bench_task_overhead_zeropool(b: &mut Bencher) {
             tasks.push(EmptyTask::new(i, &mut results));
         }
 
-        let batch = pool.submit_batch_uniform(&tasks, empty_task_fn);
+        let batch = pool.submit_batch_uniform(empty_task_fn, &tasks);
         batch.wait();
 
         black_box(results);
@@ -136,7 +136,7 @@ fn bench_indexed_computation_zeropool_optimised(b: &mut Bencher) {
         tasks.push(ComputeTask::new(WORK_PER_TASK, i, &mut results));
     }
 
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, compute_task_fn);
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(compute_task_fn, &tasks);
 
     b.iter(|| {
         let batch = pool.submit_raw_task_batch(&tasks_converted);
@@ -175,7 +175,7 @@ fn bench_task_overhead_zeropool_optimised(b: &mut Bencher) {
         tasks.push(EmptyTask::new(i, &mut results));
     }
 
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, empty_task_fn);
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(empty_task_fn, &tasks);
 
     b.iter(|| {
         let batch = pool.submit_raw_task_batch(&tasks_converted);
@@ -256,7 +256,7 @@ fn bench_heavy_compute_zeropool(b: &mut Bencher) {
             tasks.push(HeavyComputeTask::new(0, seeds[i], i, &mut results));
         }
 
-        let batch = pool.submit_batch_uniform(&tasks, heavy_compute_task_fn);
+        let batch = pool.submit_batch_uniform(heavy_compute_task_fn, &tasks);
         batch.wait();
 
         black_box(results);
@@ -329,7 +329,7 @@ fn bench_heavy_compute_zeropool_optimised(b: &mut Bencher) {
         tasks.push(HeavyComputeTask::new(0, seeds[i], i, &mut results));
     }
 
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, heavy_compute_task_fn);
+    let tasks_converted = zero_pool::uniform_tasks_to_pointers(heavy_compute_task_fn, &tasks);
 
     b.iter(|| {
         let batch = pool.submit_raw_task_batch(&tasks_converted);

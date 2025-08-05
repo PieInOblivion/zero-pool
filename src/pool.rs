@@ -1,5 +1,5 @@
 use crate::{
-    TaskFnPointer, TaskParamPointer, future::WorkFuture, queue::BatchQueue,
+    TaskFnPointer, TaskParamPointer, WorkItem, future::WorkFuture, queue::BatchQueue,
     uniform_tasks_to_pointers, worker::Worker,
 };
 use std::sync::Arc;
@@ -26,10 +26,7 @@ impl ThreadPool {
         self.queue.push_single_task(params, task_fn)
     }
 
-    pub fn submit_raw_task_batch(
-        &self,
-        tasks: &Vec<(TaskParamPointer, TaskFnPointer)>,
-    ) -> WorkFuture {
+    pub fn submit_raw_task_batch(&self, tasks: &Vec<WorkItem>) -> WorkFuture {
         self.queue.push_task_batch(tasks)
     }
 
@@ -38,8 +35,8 @@ impl ThreadPool {
         self.submit_raw_task(params_ptr, task_fn)
     }
 
-    pub fn submit_batch_uniform<T>(&self, params_vec: &[T], task_fn: TaskFnPointer) -> WorkFuture {
-        let tasks = uniform_tasks_to_pointers(params_vec, task_fn);
+    pub fn submit_batch_uniform<T>(&self, task_fn: TaskFnPointer, params_vec: &[T]) -> WorkFuture {
+        let tasks = uniform_tasks_to_pointers(task_fn, params_vec);
         self.submit_raw_task_batch(&tasks)
     }
 

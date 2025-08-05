@@ -16,7 +16,6 @@ mod padded_type;
 mod pool;
 mod queue;
 mod work_batch;
-mod work_item;
 mod worker;
 
 use std::num::NonZeroUsize;
@@ -28,6 +27,9 @@ pub type TaskFnPointer = fn(*const ());
 
 // pointer to task parameter struct
 pub type TaskParamPointer = *const ();
+
+// tuple of the two creates one work item
+pub type WorkItem = (TaskFnPointer, TaskParamPointer);
 
 // convenience function to create a new thread pool
 pub fn new() -> ThreadPool {
@@ -43,12 +45,9 @@ pub fn with_workers(worker_count: usize) -> ThreadPool {
 }
 
 // Convert uniform tasks to pointer format
-pub fn uniform_tasks_to_pointers<T>(
-    params_vec: &[T],
-    task_fn: TaskFnPointer,
-) -> Vec<(TaskParamPointer, TaskFnPointer)> {
+pub fn uniform_tasks_to_pointers<T>(task_fn: TaskFnPointer, params_vec: &[T]) -> Vec<WorkItem> {
     params_vec
         .iter()
-        .map(|params| (params as *const T as TaskParamPointer, task_fn))
+        .map(|params| (task_fn, params as *const T as TaskParamPointer))
         .collect()
 }

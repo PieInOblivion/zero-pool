@@ -1,9 +1,9 @@
 use std::sync::atomic::Ordering;
 
 use crate::{
+    WorkItem,
     future::WorkFuture,
     padded_type::{PaddedAtomicPtr, PaddedAtomicUsize},
-    work_item::WorkItem,
 };
 
 pub struct WorkBatch {
