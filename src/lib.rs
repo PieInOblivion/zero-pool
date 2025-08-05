@@ -24,7 +24,10 @@ use std::num::NonZeroUsize;
 pub use pool::ThreadPool;
 
 // task function signature, takes raw pointer to parameters
-pub type TaskFn = fn(*const ());
+pub type TaskFnPointer = fn(*const ());
+
+// pointer to task parameter struct
+pub type TaskParamPointer = *const ();
 
 // convenience function to create a new thread pool
 pub fn new() -> ThreadPool {
@@ -40,9 +43,12 @@ pub fn with_workers(worker_count: usize) -> ThreadPool {
 }
 
 // Convert uniform tasks to pointer format
-pub fn uniform_tasks_to_pointers<T>(params_vec: &[T], task_fn: TaskFn) -> Vec<(*const (), TaskFn)> {
+pub fn uniform_tasks_to_pointers<T>(
+    params_vec: &[T],
+    task_fn: TaskFnPointer,
+) -> Vec<(TaskParamPointer, TaskFnPointer)> {
     params_vec
         .iter()
-        .map(|params| (params as *const T as *const (), task_fn))
+        .map(|params| (params as *const T as TaskParamPointer, task_fn))
         .collect()
 }

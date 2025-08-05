@@ -1,6 +1,10 @@
 use std::sync::atomic::Ordering;
 
-use crate::{future::WorkFuture, padded_type::{PaddedAtomicPtr, PaddedAtomicUsize}, work_item::WorkItem};
+use crate::{
+    future::WorkFuture,
+    padded_type::{PaddedAtomicPtr, PaddedAtomicUsize},
+    work_item::WorkItem,
+};
 
 pub struct WorkBatch {
     next_item: PaddedAtomicUsize,

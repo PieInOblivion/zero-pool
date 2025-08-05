@@ -1,4 +1,7 @@
-use crate::{uniform_tasks_to_pointers, future::WorkFuture, queue::BatchQueue, worker::Worker, TaskFn};
+use crate::{
+    TaskFnPointer, TaskParamPointer, future::WorkFuture, queue::BatchQueue,
+    uniform_tasks_to_pointers, worker::Worker,
+};
 use std::sync::Arc;
 
 pub struct ThreadPool {
@@ -19,20 +22,23 @@ impl ThreadPool {
         ThreadPool { workers, queue }
     }
 
-    pub fn submit_raw_task(&self, params: *const (), task_fn: TaskFn) -> WorkFuture {
+    pub fn submit_raw_task(&self, params: TaskParamPointer, task_fn: TaskFnPointer) -> WorkFuture {
         self.queue.push_single_task(params, task_fn)
     }
 
-    pub fn submit_raw_task_batch(&self, tasks: &Vec<(*const (), TaskFn)>) -> WorkFuture {
+    pub fn submit_raw_task_batch(
+        &self,
+        tasks: &Vec<(TaskParamPointer, TaskFnPointer)>,
+    ) -> WorkFuture {
         self.queue.push_task_batch(tasks)
     }
 
-    pub fn submit_task<T>(&self, params: &T, task_fn: TaskFn) -> WorkFuture {
-        let params_ptr = params as *const T as *const ();
+    pub fn submit_task<T>(&self, params: &T, task_fn: TaskFnPointer) -> WorkFuture {
+        let params_ptr = params as *const T as TaskParamPointer;
         self.submit_raw_task(params_ptr, task_fn)
     }
 
-    pub fn submit_batch_uniform<T>(&self, params_vec: &[T], task_fn: TaskFn) -> WorkFuture {
+    pub fn submit_batch_uniform<T>(&self, params_vec: &[T], task_fn: TaskFnPointer) -> WorkFuture {
         let tasks = uniform_tasks_to_pointers(params_vec, task_fn);
         self.submit_raw_task_batch(&tasks)
     }

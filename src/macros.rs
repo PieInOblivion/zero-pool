@@ -55,7 +55,7 @@ macro_rules! zp_task_params {
 #[macro_export]
 macro_rules! zp_define_task_fn {
     ($fn_name:ident, $param_type:ty, |$params:ident| $body:block) => {
-        fn $fn_name(raw_params: *const ()) {
+        fn $fn_name(raw_params: $crate::TaskParamPointer) {
             let $params = unsafe { &*(raw_params as *const $param_type) };
             $body
         }
@@ -109,9 +109,9 @@ macro_rules! zp_write_indexed {
 #[macro_export]
 macro_rules! zp_submit_batch_mixed {
     ($pool:expr, [$( ($params:expr, $task_fn:ident) ),* $(,)?]) => {{
-        let tasks: Vec<(*const (), $crate::TaskFn)> = vec![
+        let tasks: Vec<($crate::TaskParamPointer, $crate::TaskFnPointer)> = vec![
             $(
-                ($params as *const _ as *const (), $task_fn as $crate::TaskFn)
+                ($params as *const _ as $crate::TaskParamPointer, $task_fn as $crate::TaskFnPointer)
             ),*
         ];
 
@@ -119,14 +119,19 @@ macro_rules! zp_submit_batch_mixed {
     }};
 }
 
-// Convert a vector of (params, task_fn) tuples to Vec<(*const (), TaskFn)>
+// Convert a vector of (params, task_fn) tuples to Vec<(TaskParamPointer, TaskFnPointer)>
 // Works with mixed parameter types
 #[macro_export]
 macro_rules! zp_mixed_tasks_to_pointers {
     ($tasks_vec:expr) => {{
         $tasks_vec
             .iter()
-            .map(|(params, task_fn)| (params as *const _ as *const (), *task_fn as $crate::TaskFn))
-            .collect::<Vec<(*const (), $crate::TaskFn)>>()
+            .map(|(params, task_fn)| {
+                (
+                    params as *const _ as $crate::TaskParamPointer,
+                    *task_fn as $crate::TaskFnPointer,
+                )
+            })
+            .collect::<Vec<($crate::TaskParamPointer, $crate::TaskFnPointer)>>()
     }};
 }

@@ -5,9 +5,7 @@ use std::hint::black_box;
 use test::Bencher;
 
 use rayon::prelude::*;
-use zero_pool::{
-    self, zp_define_task_fn, zp_task_params, zp_write_indexed
-};
+use zero_pool::{self, zp_define_task_fn, zp_task_params, zp_write_indexed};
 
 const TASK_COUNT: usize = 1000;
 const WORK_PER_TASK: usize = 100;
@@ -51,7 +49,7 @@ zp_define_task_fn!(empty_task_fn, EmptyTask, |params| {
 #[bench]
 fn bench_indexed_computation_zeropool(b: &mut Bencher) {
     let pool = zero_pool::new();
-    
+
     b.iter(|| {
         // allocate results vector
         let mut results = vec![0u64; TASK_COUNT];
@@ -119,19 +117,15 @@ fn bench_task_overhead_rayon(b: &mut Bencher) {
     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
 
     b.iter(|| {
-        let results: Vec<u64> = pool.install(|| {
-            (0..TASK_COUNT)
-                .into_par_iter()
-                .map(|_| 42u64)
-                .collect()
-        });
+        let results: Vec<u64> =
+            pool.install(|| (0..TASK_COUNT).into_par_iter().map(|_| 42u64).collect());
 
         black_box(results);
     });
 }
 
 // zero pool specific optimisation, tasks only needs to be created once
-// create the whole 
+// create the whole
 #[bench]
 fn bench_indexed_computation_zeropool_optimised(b: &mut Bencher) {
     let pool = zero_pool::new();
@@ -143,7 +137,7 @@ fn bench_indexed_computation_zeropool_optimised(b: &mut Bencher) {
     }
 
     let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, compute_task_fn);
-    
+
     b.iter(|| {
         let batch = pool.submit_raw_task_batch(&tasks_converted);
         batch.wait();
@@ -159,15 +153,13 @@ fn bench_indexed_computation_rayon_optimised(b: &mut Bencher) {
 
     b.iter(|| {
         pool.install(|| {
-            results
-                .par_iter_mut()
-                .for_each(|slot| {
-                    let mut sum = 0u64;
-                    for i in 0..WORK_PER_TASK {
-                        sum = sum.wrapping_add((i as u64).wrapping_mul(17).wrapping_add(23));
-                    }
-                    *slot = sum;
-                })
+            results.par_iter_mut().for_each(|slot| {
+                let mut sum = 0u64;
+                for i in 0..WORK_PER_TASK {
+                    sum = sum.wrapping_add((i as u64).wrapping_mul(17).wrapping_add(23));
+                }
+                *slot = sum;
+            })
         });
         black_box(results.clone());
     });
@@ -199,17 +191,11 @@ fn bench_task_overhead_rayon_optimised(b: &mut Bencher) {
     let mut results = vec![0u64; TASK_COUNT];
 
     b.iter(|| {
-        results = pool.install(|| {
-            (0..TASK_COUNT)
-                .into_par_iter()
-                .map(|_| 42u64)
-                .collect()
-        });
+        results = pool.install(|| (0..TASK_COUNT).into_par_iter().map(|_| 42u64).collect());
 
         black_box(results.clone());
     });
 }
-
 
 // ----------------------------
 
@@ -229,15 +215,15 @@ zp_define_task_fn!(heavy_compute_task_fn, HeavyComputeTask, |params| {
     let mut rng_state = params.seed;
     rng_state = rng_state.wrapping_mul(1103515245).wrapping_add(12345);
     let work_amount = HEAVY_MIN_WORK + (rng_state as usize % (HEAVY_MAX_WORK - HEAVY_MIN_WORK));
-    
+
     let mut sum = 0u64;
     let mut x = params.seed;
-    
+
     for _ in 0..work_amount {
         // complex computation
         x = x.wrapping_mul(1664525).wrapping_add(1013904223);
         sum = sum.wrapping_add(x);
-        
+
         // some branching to make it less predictable
         if x % 3 == 0 {
             sum = sum.wrapping_mul(17);
@@ -245,32 +231,34 @@ zp_define_task_fn!(heavy_compute_task_fn, HeavyComputeTask, |params| {
             sum = sum.wrapping_add(x >> 8);
         }
     }
-    
+
     zp_write_indexed!(params.results, params.index, sum);
 });
 
 #[bench]
 fn bench_heavy_compute_zeropool(b: &mut Bencher) {
     let pool = zero_pool::new();
-    
+
     // generate seeds for consistent random work distribution
-    let seeds: Vec<u64> = (0..TASK_COUNT).map(|i| {
-        let mut seed = i as u64;
-        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-        seed
-    }).collect();
-    
+    let seeds: Vec<u64> = (0..TASK_COUNT)
+        .map(|i| {
+            let mut seed = i as u64;
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            seed
+        })
+        .collect();
+
     b.iter(|| {
         let mut results = vec![0u64; TASK_COUNT];
-        
+
         let mut tasks = Vec::with_capacity(TASK_COUNT);
         for i in 0..TASK_COUNT {
             tasks.push(HeavyComputeTask::new(0, seeds[i], i, &mut results));
         }
-        
+
         let batch = pool.submit_batch_uniform(&tasks, heavy_compute_task_fn);
         batch.wait();
-        
+
         black_box(results);
     });
 }
@@ -278,14 +266,16 @@ fn bench_heavy_compute_zeropool(b: &mut Bencher) {
 #[bench]
 fn bench_heavy_compute_rayon(b: &mut Bencher) {
     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
-    
+
     // generate seeds for consistent random work distribution
-    let seeds: Vec<u64> = (0..TASK_COUNT).map(|i| {
-        let mut seed = i as u64;
-        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-        seed
-    }).collect();
-    
+    let seeds: Vec<u64> = (0..TASK_COUNT)
+        .map(|i| {
+            let mut seed = i as u64;
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            seed
+        })
+        .collect();
+
     b.iter(|| {
         let results: Vec<u64> = pool.install(|| {
             seeds
@@ -294,27 +284,28 @@ fn bench_heavy_compute_rayon(b: &mut Bencher) {
                     // seed to generate a pseudo-random work amount
                     let mut rng_state = seed;
                     rng_state = rng_state.wrapping_mul(1103515245).wrapping_add(12345);
-                    let work_amount = HEAVY_MIN_WORK + (rng_state as usize % (HEAVY_MAX_WORK - HEAVY_MIN_WORK));
-                    
+                    let work_amount =
+                        HEAVY_MIN_WORK + (rng_state as usize % (HEAVY_MAX_WORK - HEAVY_MIN_WORK));
+
                     let mut sum = 0u64;
                     let mut x = seed;
-                    
+
                     for _ in 0..work_amount {
                         x = x.wrapping_mul(1664525).wrapping_add(1013904223);
                         sum = sum.wrapping_add(x);
-                        
+
                         if x % 3 == 0 {
                             sum = sum.wrapping_mul(17);
                         } else if x % 7 == 0 {
                             sum = sum.wrapping_add(x >> 8);
                         }
                     }
-                    
+
                     sum
                 })
                 .collect()
         });
-        
+
         black_box(results);
     });
 }
@@ -322,14 +313,16 @@ fn bench_heavy_compute_rayon(b: &mut Bencher) {
 #[bench]
 fn bench_heavy_compute_zeropool_optimised(b: &mut Bencher) {
     let pool = zero_pool::new();
-    
+
     // generate seeds for consistent random work distribution
-    let seeds: Vec<u64> = (0..TASK_COUNT).map(|i| {
-        let mut seed = i as u64;
-        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-        seed
-    }).collect();
-    
+    let seeds: Vec<u64> = (0..TASK_COUNT)
+        .map(|i| {
+            let mut seed = i as u64;
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            seed
+        })
+        .collect();
+
     let mut results = vec![0u64; TASK_COUNT];
     let mut tasks = Vec::with_capacity(TASK_COUNT);
     for i in 0..TASK_COUNT {
@@ -337,7 +330,7 @@ fn bench_heavy_compute_zeropool_optimised(b: &mut Bencher) {
     }
 
     let tasks_converted = zero_pool::uniform_tasks_to_pointers(&tasks, heavy_compute_task_fn);
-    
+
     b.iter(|| {
         let batch = pool.submit_raw_task_batch(&tasks_converted);
         batch.wait();
@@ -348,16 +341,18 @@ fn bench_heavy_compute_zeropool_optimised(b: &mut Bencher) {
 #[bench]
 fn bench_heavy_compute_rayon_optimised(b: &mut Bencher) {
     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
-    
+
     // generate seeds for consistent random work distribution
-    let seeds: Vec<u64> = (0..TASK_COUNT).map(|i| {
-        let mut seed = i as u64;
-        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-        seed
-    }).collect();
-    
+    let seeds: Vec<u64> = (0..TASK_COUNT)
+        .map(|i| {
+            let mut seed = i as u64;
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            seed
+        })
+        .collect();
+
     let mut results = vec![0u64; TASK_COUNT];
-    
+
     b.iter(|| {
         pool.install(|| {
             results
@@ -367,22 +362,23 @@ fn bench_heavy_compute_rayon_optimised(b: &mut Bencher) {
                     // seed to generate a pseudo-random work amount
                     let mut rng_state = seed;
                     rng_state = rng_state.wrapping_mul(1103515245).wrapping_add(12345);
-                    let work_amount = HEAVY_MIN_WORK + (rng_state as usize % (HEAVY_MAX_WORK - HEAVY_MIN_WORK));
-                    
+                    let work_amount =
+                        HEAVY_MIN_WORK + (rng_state as usize % (HEAVY_MAX_WORK - HEAVY_MIN_WORK));
+
                     let mut sum = 0u64;
                     let mut x = seed;
-                    
+
                     for _ in 0..work_amount {
                         x = x.wrapping_mul(1664525).wrapping_add(1013904223);
                         sum = sum.wrapping_add(x);
-                        
+
                         if x % 3 == 0 {
                             sum = sum.wrapping_mul(17);
                         } else if x % 7 == 0 {
                             sum = sum.wrapping_add(x >> 8);
                         }
                     }
-                    
+
                     *slot = sum;
                 })
         });

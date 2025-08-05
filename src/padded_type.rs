@@ -1,4 +1,7 @@
-use std::{ops::{Deref, DerefMut}, sync::atomic::{AtomicPtr, AtomicUsize}};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::atomic::{AtomicPtr, AtomicUsize},
+};
 
 // an atomic usize padded to fill one cache line, 64 bytes
 // this prevents false sharing when multiple threads access different atomics
