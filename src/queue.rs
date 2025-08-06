@@ -52,28 +52,27 @@ impl BatchQueue {
     pub fn claim_work(&self) -> Option<(WorkItem, &WorkFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
-        while !current.is_null() {
-            let batch = unsafe { &*current };
+        loop {
+            if current.is_null() {
+                return None;
+            }
 
+            let batch = unsafe { &*current };
             if let Some(work_item) = batch.claim_next_item() {
                 return Some((work_item, &batch.future));
             }
 
             let next = batch.next.load(Ordering::Acquire);
-            if !next.is_null() {
-                let _ = self.head.compare_exchange_weak(
-                    current,
-                    next,
-                    Ordering::AcqRel,
-                    Ordering::Relaxed,
-                );
-                current = next;
-            } else {
-                break;
+            if next.is_null() {
+                return None;
             }
-        }
 
-        None
+            // try to advance head, helps other threads skip empty batches
+            let _ =
+                self.head
+                    .compare_exchange_weak(current, next, Ordering::AcqRel, Ordering::Relaxed);
+            current = next;
+        }
     }
 
     pub fn wait_for_work(&self) {

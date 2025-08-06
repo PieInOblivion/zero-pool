@@ -23,14 +23,10 @@ impl WorkBatch {
         }
     }
 
+    #[inline(always)]
     pub fn claim_next_item(&self) -> Option<WorkItem> {
         let item_index = self.next_item.fetch_add(1, Ordering::Relaxed);
-
-        if item_index < self.items.len() {
-            Some(self.items[item_index])
-        } else {
-            None
-        }
+        self.items.get(item_index).copied()
     }
 
     pub fn has_work(&self) -> bool {
