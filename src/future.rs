@@ -63,12 +63,17 @@ impl WorkFuture {
         self.remaining.load(Ordering::Relaxed)
     }
 
-    // complete one task, decrements counter and notifies if all done
-    pub fn complete_one(&self) {
-        let remaining_count = self.remaining.fetch_sub(1, Ordering::Relaxed);
+    // complets multiple tasks, decrements counter and notifies if all done
+    #[inline]
+    pub fn complete_many(&self, count: usize) {
+        if count == 0 {
+            return;
+        }
 
-        // if this was the last task, notify waiters
-        if remaining_count == 1 {
+        let remaining_count = self.remaining.fetch_sub(count, Ordering::Relaxed);
+
+        // if this completed the last tasks, notify waiters
+        if remaining_count == count {
             let (lock, cvar) = &*self.state;
             let _guard = lock.lock().unwrap();
             cvar.notify_all();

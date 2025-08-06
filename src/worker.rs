@@ -3,7 +3,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::queue::BatchQueue;
+use crate::{future::WorkFuture, queue::BatchQueue};
 
 pub struct Worker {
     _id: usize,
@@ -15,18 +15,37 @@ impl Worker {
         let handle = thread::Builder::new()
             .name(format!("zero-pool-worker-{}", id))
             .spawn(move || {
+                let mut current_batch_ptr: *const WorkFuture = std::ptr::null();
+                let mut current_batch_count = 0usize;
+
                 loop {
-                    // wait for work
                     queue.wait_for_work();
 
-                    // once woken up, greedily drain ALL available work
                     while let Some((work_item, batch_future)) = queue.claim_work() {
-                        // call the task function with raw parameters
+                        let batch_ptr = batch_future as *const WorkFuture;
+
+                        // check if same batch
+                        if current_batch_ptr != batch_ptr {
+                            // flush previous batch if exists
+                            if !current_batch_ptr.is_null() {
+                                unsafe { (*current_batch_ptr).complete_many(current_batch_count) };
+                            }
+                            current_batch_ptr = batch_ptr;
+                            current_batch_count = 0;
+                        }
+
+                        // execute task
                         (work_item.0)(work_item.1);
-                        batch_future.complete_one();
+                        current_batch_count += 1;
                     }
 
-                    // only check shutdown when queue is empty
+                    // flush any remaining completions when no more work
+                    if !current_batch_ptr.is_null() && current_batch_count > 0 {
+                        unsafe { (*current_batch_ptr).complete_many(current_batch_count) };
+                        current_batch_ptr = std::ptr::null();
+                        current_batch_count = 0;
+                    }
+
                     if queue.is_shutdown() {
                         break;
                     }
