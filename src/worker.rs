@@ -27,7 +27,7 @@ impl Worker {
                         // check if same batch
                         if current_batch_ptr != batch_ptr {
                             // flush previous batch if exists
-                            if !current_batch_ptr.is_null() {
+                            if current_batch_count > 0 {
                                 unsafe { (*current_batch_ptr).complete_many(current_batch_count) };
                                 current_batch_count = 0;
                             }
