@@ -29,9 +29,9 @@ impl Worker {
                             // flush previous batch if exists
                             if !current_batch_ptr.is_null() {
                                 unsafe { (*current_batch_ptr).complete_many(current_batch_count) };
+                                current_batch_count = 0;
                             }
                             current_batch_ptr = batch_ptr;
-                            current_batch_count = 0;
                         }
 
                         // execute task

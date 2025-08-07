@@ -32,10 +32,6 @@ impl BatchQueue {
     }
 
     pub fn push_batch(&self, items: Vec<WorkItem>, future: WorkFuture) {
-        if items.is_empty() {
-            return;
-        }
-
         let new_batch = Box::into_raw(Box::new(WorkBatch::new(items, future)));
 
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
