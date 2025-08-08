@@ -21,6 +21,7 @@ impl WorkFuture {
     }
 
     // check if all tasks are complete
+    #[inline]
     pub fn is_complete(&self) -> bool {
         self.remaining.load(Ordering::Acquire) == 0
     }
