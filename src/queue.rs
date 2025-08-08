@@ -64,9 +64,12 @@ impl BatchQueue {
             }
 
             // try to advance head, helps other threads skip empty batches
-            let _ =
-                self.head
-                    .compare_exchange_weak(current, next, Ordering::AcqRel, Ordering::Relaxed);
+            let _ = self.head.compare_exchange_weak(
+                current,
+                next,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            );
             current = next;
         }
     }
@@ -90,7 +93,7 @@ impl BatchQueue {
                 return true;
             }
 
-            current = batch.next.load(Ordering::Relaxed);
+            current = batch.next.load(Ordering::Acquire);
         }
 
         false
