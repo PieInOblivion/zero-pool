@@ -66,7 +66,7 @@ impl WorkFuture {
     // complets multiple tasks, decrements counter and notifies if all done
     #[inline]
     pub fn complete_many(&self, count: usize) {
-        let remaining_count = self.remaining.fetch_sub(count, Ordering::Relaxed);
+        let remaining_count = self.remaining.fetch_sub(count, Ordering::Release);
 
         // if this completed the last tasks, notify waiters
         if remaining_count == count {
