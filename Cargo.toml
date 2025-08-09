@@ -9,6 +9,11 @@ repository = "https://github.com/PieInOblivion/zero-pool"
 keywords = ["threadpool", "performance", "parallel", "concurrency", "lockfree"]
 categories = ["concurrency"]
 readme = "README.md"
+exclude = [
+    ".gitignore",
+    "benches/*",
+    "tests/*",
+]
 
 [dependencies]
 # stdlib only!
