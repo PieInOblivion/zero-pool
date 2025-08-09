@@ -8,6 +8,7 @@ description = "High-performance thread pool with consistent low-latency task dis
 repository = "https://github.com/PieInOblivion/zero-pool"
 keywords = ["threadpool", "performance", "parallel", "concurrency", "lockfree"]
 categories = ["concurrency"]
+readme = "README.md"
 
 [dependencies]
 # stdlib only!
