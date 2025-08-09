@@ -53,9 +53,6 @@ impl Worker {
             })
             .expect("Failed to spawn worker thread");
 
-        Worker {
-            _id: id,
-            handle: handle,
-        }
+        Worker { _id: id, handle }
     }
 }

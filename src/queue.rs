@@ -127,14 +127,14 @@ impl BatchQueue {
         future
     }
 
-    pub fn push_task_batch(&self, tasks: &Vec<WorkItem>) -> WorkFuture {
+    pub fn push_task_batch(&self, tasks: &[WorkItem]) -> WorkFuture {
         if tasks.is_empty() {
             return WorkFuture::new(0);
         }
 
         let future = WorkFuture::new(tasks.len());
 
-        self.push_batch(tasks.clone(), future.clone());
+        self.push_batch(tasks.to_owned(), future.clone());
         future
     }
 }

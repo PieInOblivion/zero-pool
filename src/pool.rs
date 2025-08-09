@@ -26,7 +26,7 @@ impl ThreadPool {
         self.queue.push_single_task(task_fn, params)
     }
 
-    pub fn submit_raw_task_batch(&self, tasks: &Vec<WorkItem>) -> WorkFuture {
+    pub fn submit_raw_task_batch(&self, tasks: &[WorkItem]) -> WorkFuture {
         self.queue.push_task_batch(tasks)
     }
 
