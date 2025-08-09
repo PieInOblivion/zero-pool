@@ -114,6 +114,8 @@ impl BatchQueue {
 
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Release);
+
+        let _guard = self.condvar_mutex.lock().unwrap();
         self.condvar.notify_all();
     }
 

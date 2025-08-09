@@ -14,7 +14,7 @@ This is an experimental thread pool implementation focused on exploring lock-fre
 - **Zero per worker queues** - single global queue structure
 - **Zero external dependencies** - standard library and stable rust only
 
-Workers are only passed 16 bytes per work item, a function pointer and a struct pointer. Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead.
+Workers are only passed 16 bytes per work item, a function pointer and a struct pointer. Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
 
 Since the library uses raw pointers, you must ensure parameter structs remain valid until `future.wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe macros like `zp_submit_task!` and `zp_submit_batch_uniform!` for convenient usage.
 
