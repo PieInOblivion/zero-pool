@@ -1,5 +1,2 @@
 /target
 Cargo.lock
-rust-toolchain.toml
-.cargo_vcs_info.json
-Cargo.toml.orig
