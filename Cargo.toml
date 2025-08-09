@@ -13,6 +13,8 @@ exclude = [
     ".gitignore",
     "benches/*",
     "tests/*",
+    ".cargo_vcs_info.json",
+    "Cargo.toml.orig",
 ]
 
 [dependencies]
