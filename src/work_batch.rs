@@ -33,9 +33,4 @@ impl WorkBatch {
     pub fn has_work(&self) -> bool {
         self.next_item.load(Ordering::Relaxed) < self.items.len()
     }
-
-    pub fn remaining_items(&self) -> usize {
-        let claimed = self.next_item.load(Ordering::Relaxed);
-        self.items.len().saturating_sub(claimed)
-    }
 }

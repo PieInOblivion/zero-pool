@@ -99,19 +99,6 @@ impl BatchQueue {
         false
     }
 
-    pub fn len(&self) -> usize {
-        let mut total = 0;
-        let mut current = self.head.load(Ordering::Relaxed);
-
-        while !current.is_null() {
-            let batch = unsafe { &*current };
-            total += batch.remaining_items();
-            current = batch.next.load(Ordering::Relaxed);
-        }
-
-        total
-    }
-
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Release);
 

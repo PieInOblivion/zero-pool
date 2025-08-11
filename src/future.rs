@@ -6,6 +6,7 @@ use crate::padded_type::PaddedAtomicUsize;
 
 // public work future with arc wrapped fields
 #[derive(Clone)]
+#[repr(align(64))]
 pub struct WorkFuture {
     remaining: Arc<PaddedAtomicUsize>,
     state: Arc<(Mutex<()>, Condvar)>,
@@ -21,7 +22,6 @@ impl WorkFuture {
     }
 
     // check if all tasks are complete
-    #[inline]
     pub fn is_complete(&self) -> bool {
         self.remaining.load(Ordering::Acquire) == 0
     }

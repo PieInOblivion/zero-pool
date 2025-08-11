@@ -4,9 +4,10 @@ use crate::{
 };
 use std::sync::Arc;
 
+#[repr(align(64))]
 pub struct ThreadPool {
-    workers: Vec<Worker>,
     queue: Arc<BatchQueue>,
+    workers: Vec<Worker>,
 }
 
 impl ThreadPool {
@@ -19,7 +20,7 @@ impl ThreadPool {
             .map(|id| Worker::new(id, queue.clone()))
             .collect();
 
-        ThreadPool { workers, queue }
+        ThreadPool { queue, workers }
     }
 
     pub fn submit_raw_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> WorkFuture {
@@ -38,14 +39,6 @@ impl ThreadPool {
     pub fn submit_batch_uniform<T>(&self, task_fn: TaskFnPointer, params_vec: &[T]) -> WorkFuture {
         let tasks = uniform_tasks_to_pointers(task_fn, params_vec);
         self.submit_raw_task_batch(&tasks)
-    }
-
-    pub fn worker_count(&self) -> usize {
-        self.workers.len()
-    }
-
-    pub fn total_pending(&self) -> usize {
-        self.queue.len()
     }
 }
 
