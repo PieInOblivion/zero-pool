@@ -20,18 +20,18 @@ Since the library uses raw pointers, you must ensure parameter structs remain va
 
 ## Benchmarks
 ```rust
-test bench_heavy_compute_rayon                    ... bench:   4,619,568.80 ns/iter (+/- 642,887.72)
-test bench_heavy_compute_rayon_optimised          ... bench:   4,615,881.40 ns/iter (+/- 490,162.33)
-test bench_heavy_compute_zeropool                 ... bench:   4,337,583.60 ns/iter (+/- 423,493.38)
-test bench_heavy_compute_zeropool_optimised       ... bench:   4,345,103.55 ns/iter (+/- 487,430.75)
-test bench_indexed_computation_rayon              ... bench:      33,477.23 ns/iter (+/- 12,478.03)
-test bench_indexed_computation_rayon_optimised    ... bench:      30,486.37 ns/iter (+/- 10,377.72)
-test bench_indexed_computation_zeropool           ... bench:      52,282.21 ns/iter (+/- 4,380.24)
-test bench_indexed_computation_zeropool_optimised ... bench:      39,232.37 ns/iter (+/- 2,801.83)
-test bench_task_overhead_rayon                    ... bench:      30,920.70 ns/iter (+/- 11,045.81)
-test bench_task_overhead_rayon_optimised          ... bench:      31,846.86 ns/iter (+/- 10,533.83)
-test bench_task_overhead_zeropool                 ... bench:      51,117.35 ns/iter (+/- 5,096.24)
-test bench_task_overhead_zeropool_optimised       ... bench:      41,098.75 ns/iter (+/- 7,649.85)
+test bench_heavy_compute_rayon                    ... bench:   4,832,415.35 ns/iter (+/- 589,158.73)
+test bench_heavy_compute_rayon_optimised          ... bench:   4,803,499.90 ns/iter (+/- 594,997.02)
+test bench_heavy_compute_zeropool                 ... bench:   4,545,994.50 ns/iter (+/- 398,488.22)
+test bench_heavy_compute_zeropool_optimised       ... bench:   4,504,624.40 ns/iter (+/- 374,456.86)
+test bench_indexed_computation_rayon              ... bench:      38,391.97 ns/iter (+/- 10,798.68)
+test bench_indexed_computation_rayon_optimised    ... bench:      35,497.33 ns/iter (+/- 8,465.87)
+test bench_indexed_computation_zeropool           ... bench:      53,607.94 ns/iter (+/- 4,796.70)
+test bench_indexed_computation_zeropool_optimised ... bench:      45,780.72 ns/iter (+/- 4,084.80)
+test bench_task_overhead_rayon                    ... bench:      39,391.46 ns/iter (+/- 12,897.19)
+test bench_task_overhead_rayon_optimised          ... bench:      39,333.17 ns/iter (+/- 10,089.18)
+test bench_task_overhead_zeropool                 ... bench:      50,906.97 ns/iter (+/- 7,578.89)
+test bench_task_overhead_zeropool_optimised       ... bench:      44,762.33 ns/iter (+/- 8,659.38)
 ```
 
 ## Example Usage

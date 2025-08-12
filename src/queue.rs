@@ -49,11 +49,8 @@ impl BatchQueue {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
-            if current.is_null() {
-                return None;
-            }
-
             let batch = unsafe { &*current };
+            
             if let Some(work_item) = batch.claim_next_item() {
                 return Some((work_item, &batch.future));
             }
