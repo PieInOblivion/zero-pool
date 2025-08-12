@@ -40,6 +40,12 @@ impl ThreadPool {
         let tasks = uniform_tasks_to_pointers(task_fn, params_vec);
         self.submit_raw_task_batch(&tasks)
     }
+
+    // Some compiler heuristic black magic happens here.
+    // By having one extra function in ThreadPool, benchmarks are consistantly ~9% faster.
+    pub fn __reserved_for_performance(&self) -> ! {
+        unreachable!()
+    }
 }
 
 impl Drop for ThreadPool {
