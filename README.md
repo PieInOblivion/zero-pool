@@ -117,8 +117,8 @@ let tasks: Vec<_> = (0..100).map(|i| {
     BatchTask::new(i, 1000, &mut results)
 }).collect();
 
-let batch = pool.submit_batch_uniform(batch_task, &tasks);
-batch.wait();
+let future = pool.submit_batch_uniform(batch_task, &tasks);
+future.wait();
 ```
 
 ### Submitting a Single Task
@@ -180,8 +180,8 @@ let tasks: Vec<_> = results.iter_mut().enumerate().map(|(i, result)| {
     ComputeTask::new(1000 + i * 10, result)
 }).collect();
 
-let batch = pool.submit_batch_uniform(compute_task, &tasks);
-batch.wait();
+let future = pool.submit_batch_uniform(compute_task, &tasks);
+future.wait();
 
 println!("First result: {}", results[0]);
 ```
@@ -226,11 +226,11 @@ let mut multiply_result = 0u64;
 let add = AddTask::new(5, 3, &mut add_result);
 let multiply = MultiplyTask::new(4, 7, &mut multiply_result);
 
-let batch = zp_submit_batch_mixed!(pool, [
+let future = zp_submit_batch_mixed!(pool, [
     (&add, add_task),
     (&multiply, multiply_task),
 ]);
-batch.wait();
+future.wait();
 
 println!("5 + 3 = {}", add_result);
 println!("4 * 7 = {}", multiply_result);
@@ -272,7 +272,7 @@ let tasks_converted = zero_pool::uniform_tasks_to_pointers(hot_task_fn, &tasks);
 // Submit multiple times with zero conversion overhead
 for _ in 0..10 {
     results.fill(0); // Reset results
-    let batch = pool.submit_raw_task_batch(&tasks_converted);
-    batch.wait();
+    let future = pool.submit_raw_task_batch(&tasks_converted);
+    future.wait();
 }
 ```
