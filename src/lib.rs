@@ -18,9 +18,9 @@ mod queue;
 mod work_batch;
 mod worker;
 
-use std::num::NonZeroUsize;
-
 pub use pool::ThreadPool;
+
+pub use future::WorkFuture;
 
 // task function signature, takes raw pointer to parameters
 pub type TaskFnPointer = fn(*const ());
@@ -34,7 +34,7 @@ pub type WorkItem = (TaskFnPointer, TaskParamPointer);
 // convenience function to create a new thread pool
 pub fn new() -> ThreadPool {
     let worker_count = std::thread::available_parallelism()
-        .map(NonZeroUsize::get)
+        .map(std::num::NonZeroUsize::get)
         .unwrap_or(1);
     ThreadPool::new(worker_count)
 }

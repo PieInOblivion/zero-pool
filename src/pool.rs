@@ -1,13 +1,12 @@
 use crate::{
     TaskFnPointer, TaskParamPointer, WorkItem, future::WorkFuture, queue::BatchQueue,
-    uniform_tasks_to_pointers, worker::Worker,
+    uniform_tasks_to_pointers, worker::spawn_worker,
 };
-use std::sync::Arc;
+use std::{sync::Arc, thread::JoinHandle};
 
-#[repr(align(64))]
 pub struct ThreadPool {
     queue: Arc<BatchQueue>,
-    workers: Vec<Worker>,
+    workers: Vec<JoinHandle<()>>,
 }
 
 impl ThreadPool {
@@ -16,8 +15,8 @@ impl ThreadPool {
 
         let queue = Arc::new(BatchQueue::new());
 
-        let workers: Vec<Worker> = (0..worker_count)
-            .map(|id| Worker::new(id, queue.clone()))
+        let workers: Vec<JoinHandle<()>> = (0..worker_count)
+            .map(|id| spawn_worker(id, queue.clone()))
             .collect();
 
         ThreadPool { queue, workers }
@@ -40,14 +39,6 @@ impl ThreadPool {
         let tasks = uniform_tasks_to_pointers(task_fn, params_vec);
         self.submit_raw_task_batch(&tasks)
     }
-
-    // Some compiler heuristic black magic happens here.
-    // By having one extra function in ThreadPool,
-    // benchmarks are consistently ~9% faster on an AMD Ryzen 9 5900X, and no change on 10th gen Intel.
-    // TODO: Learn black magic
-    pub fn __reserved_for_performance(&self) -> ! {
-        unreachable!()
-    }
 }
 
 impl Drop for ThreadPool {
@@ -55,8 +46,8 @@ impl Drop for ThreadPool {
         self.queue.shutdown();
 
         let workers = std::mem::take(&mut self.workers);
-        for worker in workers {
-            let _ = worker.handle.join();
+        for handle in workers {
+            let _ = handle.join();
         }
     }
 }
