@@ -42,7 +42,9 @@ impl ThreadPool {
     }
 
     // Some compiler heuristic black magic happens here.
-    // By having one extra function in ThreadPool, benchmarks are consistantly ~9% faster.
+    // By having one extra function in ThreadPool,
+    // benchmarks are consistently ~9% faster on an AMD Ryzen 9 5900X, and no change on 10th gen Intel.
+    // TODO: Learn black magic
     pub fn __reserved_for_performance(&self) -> ! {
         unreachable!()
     }
