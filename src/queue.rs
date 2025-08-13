@@ -50,7 +50,7 @@ impl BatchQueue {
 
         loop {
             let batch = unsafe { &*current };
-            
+
             if let Some(work_item) = batch.claim_next_item() {
                 return Some((work_item, &batch.future));
             }
@@ -71,11 +71,19 @@ impl BatchQueue {
         }
     }
 
-    pub fn wait_for_work(&self) {
+    // bool returns if shutdown has been set
+    pub fn wait_for_work(&self) -> bool {
         let mut guard = self.condvar_mutex.lock().unwrap();
 
-        // check condition while holding the mutex to avoid race conditions
-        while !self.has_work() && !self.is_shutdown() {
+        loop {
+            if self.has_work() {
+                return false;
+            }
+
+            if self.shutdown.load(Ordering::Relaxed) {
+                return true;
+            }
+
             guard = self.condvar.wait(guard).unwrap();
         }
     }
@@ -101,10 +109,6 @@ impl BatchQueue {
 
         let _guard = self.condvar_mutex.lock().unwrap();
         self.condvar.notify_all();
-    }
-
-    pub fn is_shutdown(&self) -> bool {
-        self.shutdown.load(Ordering::Acquire)
     }
 
     pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> WorkFuture {

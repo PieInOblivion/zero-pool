@@ -19,7 +19,7 @@ impl Worker {
                 let mut current_batch_count = 0usize;
 
                 loop {
-                    queue.wait_for_work();
+                    let shutdown = queue.wait_for_work();
 
                     while let Some((work_item, batch_future)) = queue.claim_work() {
                         let batch_ptr = batch_future as *const WorkFuture;
@@ -40,13 +40,12 @@ impl Worker {
                     }
 
                     // flush any remaining completions when no more work
-                    if !current_batch_ptr.is_null() && current_batch_count > 0 {
+                    if current_batch_count > 0 {
                         unsafe { (*current_batch_ptr).complete_many(current_batch_count) };
-                        current_batch_ptr = std::ptr::null();
                         current_batch_count = 0;
                     }
 
-                    if queue.is_shutdown() {
+                    if shutdown {
                         break;
                     }
                 }
