@@ -9,8 +9,8 @@ use crate::{
 pub struct WorkBatch {
     next_item: PaddedAtomicUsize,
     pub items: Vec<WorkItem>,
-    pub next: PaddedAtomicPtr<WorkBatch>,
     pub future: WorkFuture,
+    pub next: PaddedAtomicPtr<WorkBatch>,
 }
 
 impl WorkBatch {
@@ -18,8 +18,8 @@ impl WorkBatch {
         WorkBatch {
             next_item: PaddedAtomicUsize::new(0),
             items,
-            next: PaddedAtomicPtr::new(std::ptr::null_mut()),
             future,
+            next: PaddedAtomicPtr::new(std::ptr::null_mut()),
         }
     }
 
