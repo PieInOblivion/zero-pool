@@ -65,7 +65,6 @@ impl WorkFuture {
     }
 
     // complets multiple tasks, decrements counter and notifies if all done
-    #[inline]
     pub(crate) fn complete_many(&self, count: usize) {
         let remaining_count = self.remaining.fetch_sub(count, Ordering::Release);
 
