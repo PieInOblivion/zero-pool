@@ -14,7 +14,7 @@ pub struct WorkFuture {
 
 impl WorkFuture {
     // create a new work future for the given number of tasks
-    pub fn new(task_count: usize) -> Self {
+    pub(crate) fn new(task_count: usize) -> Self {
         WorkFuture {
             remaining: Arc::new(PaddedAtomicUsize::new(task_count)),
             state: Arc::new((Mutex::new(()), Condvar::new())),
@@ -66,7 +66,7 @@ impl WorkFuture {
 
     // complets multiple tasks, decrements counter and notifies if all done
     #[inline]
-    pub fn complete_many(&self, count: usize) {
+    pub(crate) fn complete_many(&self, count: usize) {
         let remaining_count = self.remaining.fetch_sub(count, Ordering::Release);
 
         // if this completed the last tasks, notify waiters
