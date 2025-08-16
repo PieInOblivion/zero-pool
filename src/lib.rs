@@ -18,7 +18,7 @@ mod queue;
 mod work_batch;
 mod worker;
 
-pub use pool::ThreadPool;
+pub use pool::ZeroPool;
 
 pub use future::WorkFuture;
 
@@ -30,19 +30,6 @@ pub type TaskParamPointer = *const ();
 
 // tuple of the two creates one work item
 pub type WorkItem = (TaskFnPointer, TaskParamPointer);
-
-// convenience function to create a new thread pool
-pub fn new() -> ThreadPool {
-    let worker_count = std::thread::available_parallelism()
-        .map(std::num::NonZeroUsize::get)
-        .unwrap_or(1);
-    ThreadPool::new(worker_count)
-}
-
-// create thread pool with specific worker count
-pub fn with_workers(worker_count: usize) -> ThreadPool {
-    ThreadPool::new(worker_count)
-}
 
 // Convert uniform tasks to pointer format
 #[inline]

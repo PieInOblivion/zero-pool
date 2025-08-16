@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 use zero_pool::{
-    self, TaskFnPointer, TaskParamPointer, zp_define_task_fn, zp_submit_batch_mixed,
+    TaskFnPointer, TaskParamPointer, ZeroPool, zp_define_task_fn, zp_submit_batch_mixed,
     zp_task_params, zp_write,
 };
 
@@ -139,7 +139,7 @@ zp_define_task_fn!(sort_data_task, SortTask, |params| {
 
 #[test]
 fn test_basic_functionality() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
     let mut result = 0u64;
 
     let task = SimpleTask::new(1000, &mut result);
@@ -152,7 +152,7 @@ fn test_basic_functionality() {
 
 #[test]
 fn test_massive_simple_tasks() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
     let task_count = 10_000;
     let mut results = vec![0u64; task_count];
 
@@ -177,7 +177,7 @@ fn test_massive_simple_tasks() {
 
 #[test]
 fn test_mixed_workload() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     let mut simple_result = 0u64;
     let simple_task = SimpleTask::new(50000, &mut simple_result);
@@ -220,7 +220,7 @@ fn test_mixed_workload() {
 
 #[test]
 fn test_empty_batch_submission() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     println!("Testing empty batch submissions...");
 
@@ -239,7 +239,7 @@ fn test_empty_batch_submission() {
 #[test]
 fn test_single_worker_behavior() {
     // Important to test single-threaded execution path
-    let pool = zero_pool::with_workers(1);
+    let pool = ZeroPool::with_workers(1);
 
     println!("Testing single worker pool behavior...");
 
@@ -270,7 +270,7 @@ fn test_different_worker_counts() {
     for worker_count in [1, 2, 4, 8] {
         println!("Testing with {} workers", worker_count);
 
-        let pool = zero_pool::with_workers(worker_count);
+        let pool = ZeroPool::with_workers(worker_count);
         let task_count = worker_count * 10;
         let mut results = vec![0u64; task_count];
 
@@ -302,7 +302,7 @@ fn test_shutdown_and_cleanup() {
     let completed_before_drop;
 
     {
-        let pool = zero_pool::new();
+        let pool = ZeroPool::new();
 
         let tasks: Vec<_> = final_results
             .iter_mut()
@@ -324,7 +324,7 @@ fn test_shutdown_and_cleanup() {
 
     // Test that a new pool can be created after the old one was dropped
     {
-        let pool2 = zero_pool::new();
+        let pool2 = ZeroPool::new();
         let mut test_result = 0u64;
         let task = SimpleTask::new(100, &mut test_result);
         let future = pool2.submit_task(simple_cpu_task, &task);
@@ -340,7 +340,7 @@ fn test_rapid_pool_creation() {
     for iteration in 0..5 {
         println!("Rapid pool iteration {}", iteration);
 
-        let pool = zero_pool::new();
+        let pool = ZeroPool::new();
         let mut result = 0u64;
         let task = SimpleTask::new(500, &mut result);
 
@@ -357,7 +357,7 @@ fn test_rapid_pool_creation() {
 
 #[test]
 fn test_wait_timeout() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     // Test that timeout works for quick tasks
     let mut result = 0u64;
@@ -389,7 +389,7 @@ fn test_wait_timeout() {
 
 #[test]
 fn test_stress_rapid_batches() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     for batch_num in 0..10 {
         let mut results = vec![0u64; 100];
@@ -416,7 +416,7 @@ fn test_stress_rapid_batches() {
 #[test]
 fn test_benchmark_simulation() {
     // Simulates what criterion does - multiple iterations with the same pool
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     for iteration in 0..20 {
         let mut results = vec![0u64; 100];
@@ -444,7 +444,7 @@ fn test_benchmark_simulation() {
 
 #[test]
 fn test_memory_pressure() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
     let mut all_results = Vec::new();
 
     for iteration in 0..20 {
@@ -476,7 +476,7 @@ fn test_memory_pressure() {
 
 #[test]
 fn test_optimized_uniform_batch() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
     let task_count = 1000;
     let mut results = vec![0u64; task_count];
 
@@ -500,7 +500,7 @@ fn test_optimized_uniform_batch() {
 
 #[test]
 fn test_optimized_api_equivalence() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
     let task_count = 500;
 
     // Test normal API
@@ -536,7 +536,7 @@ fn test_optimized_api_equivalence() {
 
 #[test]
 fn test_optimized_mixed_batch() {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     let mut simple_result = 0u64;
     let simple_task = SimpleTask::new(50000, &mut simple_result);
@@ -568,7 +568,7 @@ fn test_optimized_mixed_batch() {
 #[test]
 fn test_optimized_reuse_pattern() {
     // Tests reusing converted task pointers across multiple submissions
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
     let task_count = 100;
 
     let mut results = vec![0u64; task_count];
@@ -603,7 +603,7 @@ fn test_optimized_reuse_pattern() {
 fn test_complex_workload_scaling() {
     // Test how complex tasks scale with worker count
     for workers in [1, 2, 4] {
-        let pool = zero_pool::with_workers(workers);
+        let pool = ZeroPool::with_workers(workers);
         let mut results = vec![0.0; 20];
 
         let tasks: Vec<_> = results

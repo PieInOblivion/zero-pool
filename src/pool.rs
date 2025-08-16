@@ -4,13 +4,20 @@ use crate::{
 };
 use std::{sync::Arc, thread::JoinHandle};
 
-pub struct ThreadPool {
+pub struct ZeroPool {
     queue: Arc<BatchQueue>,
     workers: Vec<JoinHandle<()>>,
 }
 
-impl ThreadPool {
-    pub fn new(worker_count: usize) -> Self {
+impl ZeroPool {
+    pub fn new() -> Self {
+        let worker_count = std::thread::available_parallelism()
+            .map(std::num::NonZeroUsize::get)
+            .unwrap_or(1);
+        Self::with_workers(worker_count)
+    }
+
+    pub fn with_workers(worker_count: usize) -> Self {
         assert!(worker_count > 0, "Must have at least one worker");
 
         let queue = Arc::new(BatchQueue::new());
@@ -19,7 +26,7 @@ impl ThreadPool {
             .map(|id| spawn_worker(id, queue.clone()))
             .collect();
 
-        ThreadPool { queue, workers }
+        ZeroPool { queue, workers }
     }
 
     pub fn submit_raw_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> WorkFuture {
@@ -41,7 +48,7 @@ impl ThreadPool {
     }
 }
 
-impl Drop for ThreadPool {
+impl Drop for ZeroPool {
     fn drop(&mut self) {
         self.queue.shutdown();
 

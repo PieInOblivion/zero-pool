@@ -5,7 +5,7 @@ use std::hint::black_box;
 use test::Bencher;
 
 use rayon::prelude::*;
-use zero_pool::{self, zp_define_task_fn, zp_task_params, zp_write_indexed};
+use zero_pool::{ZeroPool, zp_define_task_fn, zp_task_params, zp_write_indexed};
 
 const TASK_COUNT: usize = 1000;
 const WORK_PER_TASK: usize = 100;
@@ -48,7 +48,7 @@ zp_define_task_fn!(empty_task_fn, EmptyTask, |params| {
 
 #[bench]
 fn bench_indexed_computation_zeropool(b: &mut Bencher) {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     b.iter(|| {
         // allocate results vector
@@ -95,7 +95,7 @@ fn bench_indexed_computation_rayon(b: &mut Bencher) {
 
 #[bench]
 fn bench_task_overhead_zeropool(b: &mut Bencher) {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     b.iter(|| {
         let mut results = vec![0u64; TASK_COUNT];
@@ -128,7 +128,7 @@ fn bench_task_overhead_rayon(b: &mut Bencher) {
 // create the whole
 #[bench]
 fn bench_indexed_computation_zeropool_optimised(b: &mut Bencher) {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     let mut results = vec![0u64; TASK_COUNT];
     let mut tasks = Vec::with_capacity(TASK_COUNT);
@@ -167,7 +167,7 @@ fn bench_indexed_computation_rayon_optimised(b: &mut Bencher) {
 
 #[bench]
 fn bench_task_overhead_zeropool_optimised(b: &mut Bencher) {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     let mut results = vec![0u64; TASK_COUNT];
     let mut tasks = Vec::with_capacity(TASK_COUNT);
@@ -237,7 +237,7 @@ zp_define_task_fn!(heavy_compute_task_fn, HeavyComputeTask, |params| {
 
 #[bench]
 fn bench_heavy_compute_zeropool(b: &mut Bencher) {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     // generate seeds for consistent random work distribution
     let seeds: Vec<u64> = (0..TASK_COUNT)
@@ -312,7 +312,7 @@ fn bench_heavy_compute_rayon(b: &mut Bencher) {
 
 #[bench]
 fn bench_heavy_compute_zeropool_optimised(b: &mut Bencher) {
-    let pool = zero_pool::new();
+    let pool = ZeroPool::new();
 
     // generate seeds for consistent random work distribution
     let seeds: Vec<u64> = (0..TASK_COUNT)
