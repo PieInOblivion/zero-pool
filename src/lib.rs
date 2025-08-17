@@ -35,17 +35,17 @@
 //! assert_eq!(result, 84);
 //! ```
 
-mod future;
 mod macros;
 mod padded_type;
 mod pool;
 mod queue;
 mod task_batch;
+mod task_future;
 mod worker;
 
 pub use pool::ZeroPool;
 
-pub use future::WorkFuture;
+pub use task_future::TaskFuture;
 
 /// Function pointer type for task execution
 ///

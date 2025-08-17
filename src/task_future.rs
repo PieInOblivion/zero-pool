@@ -4,17 +4,20 @@ use std::time::Duration;
 
 use crate::padded_type::PaddedAtomicUsize;
 
-// public work future with arc wrapped fields
+/// A future that tracks completion of submitted tasks
+/// 
+/// TaskFuture provides both blocking and non-blocking ways to wait for
+/// task completion, with efficient condition variable notification.
 #[derive(Clone)]
-pub struct WorkFuture {
+pub struct TaskFuture {
     remaining: Arc<PaddedAtomicUsize>,
     state: Arc<(Mutex<()>, Condvar)>,
 }
 
-impl WorkFuture {
+impl TaskFuture {
     // create a new work future for the given number of tasks
     pub(crate) fn new(task_count: usize) -> Self {
-        WorkFuture {
+        TaskFuture {
             remaining: Arc::new(PaddedAtomicUsize::new(task_count)),
             state: Arc::new((Mutex::new(()), Condvar::new())),
         }
@@ -77,7 +80,7 @@ impl WorkFuture {
         self.remaining.load(Ordering::Relaxed)
     }
 
-    // complets multiple tasks, decrements counter and notifies if all done
+    // completes multiple tasks, decrements counter and notifies if all done
     #[inline]
     pub(crate) fn complete_many(&self, count: usize) {
         let remaining_count = self.remaining.fetch_sub(count, Ordering::Release);

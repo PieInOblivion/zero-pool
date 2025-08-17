@@ -1,11 +1,11 @@
 use crate::{
-    TaskFnPointer, TaskItem, TaskParamPointer, future::WorkFuture, queue::BatchQueue,
+    TaskFnPointer, TaskItem, TaskParamPointer, queue::Queue, task_future::TaskFuture,
     uniform_tasks_to_pointers, worker::spawn_worker,
 };
 use std::{sync::Arc, thread::JoinHandle};
 
 pub struct ZeroPool {
-    queue: Arc<BatchQueue>,
+    queue: Arc<Queue>,
     workers: Vec<JoinHandle<()>>,
 }
 
@@ -46,7 +46,7 @@ impl ZeroPool {
     pub fn with_workers(worker_count: usize) -> Self {
         assert!(worker_count > 0, "Must have at least one worker");
 
-        let queue = Arc::new(BatchQueue::new());
+        let queue = Arc::new(Queue::new());
 
         let workers: Vec<JoinHandle<()>> = (0..worker_count)
             .map(|id| spawn_worker(id, queue.clone()))
@@ -88,7 +88,7 @@ impl ZeroPool {
     /// );
     /// future.wait();
     /// ```
-    pub fn submit_raw_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> WorkFuture {
+    pub fn submit_raw_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> TaskFuture {
         self.queue.push_single_task(task_fn, params)
     }
 
@@ -121,7 +121,7 @@ impl ZeroPool {
     /// let future = pool.submit_raw_task_batch(&tasks);
     /// future.wait();
     /// ```
-    pub fn submit_raw_task_batch(&self, tasks: &[TaskItem]) -> WorkFuture {
+    pub fn submit_raw_task_batch(&self, tasks: &[TaskItem]) -> TaskFuture {
         self.queue.push_task_batch(tasks)
     }
 
@@ -151,7 +151,7 @@ impl ZeroPool {
     /// future.wait();
     /// assert_eq!(result, 84);
     /// ```
-    pub fn submit_task<T>(&self, task_fn: TaskFnPointer, params: &T) -> WorkFuture {
+    pub fn submit_task<T>(&self, task_fn: TaskFnPointer, params: &T) -> TaskFuture {
         let params_ptr = params as *const T as TaskParamPointer;
         self.submit_raw_task(task_fn, params_ptr)
     }
@@ -183,7 +183,7 @@ impl ZeroPool {
     /// let future = pool.submit_batch_uniform(my_task_fn, &tasks);
     /// future.wait();
     /// ```
-    pub fn submit_batch_uniform<T>(&self, task_fn: TaskFnPointer, params_vec: &[T]) -> WorkFuture {
+    pub fn submit_batch_uniform<T>(&self, task_fn: TaskFnPointer, params_vec: &[T]) -> TaskFuture {
         let tasks = uniform_tasks_to_pointers(task_fn, params_vec);
         self.submit_raw_task_batch(&tasks)
     }

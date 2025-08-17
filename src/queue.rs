@@ -1,14 +1,14 @@
 use crate::padded_type::PaddedAtomicPtr;
 use crate::task_batch::TaskBatch;
-use crate::{TaskFnPointer, future::WorkFuture};
+use crate::{TaskFnPointer, task_future::TaskFuture};
 use crate::{TaskItem, TaskParamPointer};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 
-unsafe impl Send for BatchQueue {}
-unsafe impl Sync for BatchQueue {}
+unsafe impl Send for Queue {}
+unsafe impl Sync for Queue {}
 
-pub struct BatchQueue {
+pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
     tail: PaddedAtomicPtr<TaskBatch>,
 
@@ -18,11 +18,11 @@ pub struct BatchQueue {
     condvar: Condvar,
 }
 
-impl BatchQueue {
+impl Queue {
     pub fn new() -> Self {
-        let dummy = Box::into_raw(Box::new(TaskBatch::new(Vec::new(), WorkFuture::new(0))));
+        let dummy = Box::into_raw(Box::new(TaskBatch::new(Vec::new(), TaskFuture::new(0))));
 
-        BatchQueue {
+        Queue {
             head: PaddedAtomicPtr::new(dummy),
             tail: PaddedAtomicPtr::new(dummy),
             shutdown: AtomicBool::new(false),
@@ -31,7 +31,7 @@ impl BatchQueue {
         }
     }
 
-    pub fn push_batch(&self, items: Vec<TaskItem>, future: WorkFuture) {
+    pub fn push_batch(&self, items: Vec<TaskItem>, future: TaskFuture) {
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(items, future)));
 
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
@@ -45,7 +45,7 @@ impl BatchQueue {
         self.condvar.notify_all();
     }
 
-    pub fn claim_work(&self) -> Option<(TaskItem, &WorkFuture)> {
+    pub fn claim_work(&self) -> Option<(TaskItem, &TaskFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
@@ -111,25 +111,25 @@ impl BatchQueue {
         self.condvar.notify_all();
     }
 
-    pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> WorkFuture {
-        let future = WorkFuture::new(1);
+    pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> TaskFuture {
+        let future = TaskFuture::new(1);
         self.push_batch(vec![(task_fn, params)], future.clone());
         future
     }
 
-    pub fn push_task_batch(&self, tasks: &[TaskItem]) -> WorkFuture {
+    pub fn push_task_batch(&self, tasks: &[TaskItem]) -> TaskFuture {
         if tasks.is_empty() {
-            return WorkFuture::new(0);
+            return TaskFuture::new(0);
         }
 
-        let future = WorkFuture::new(tasks.len());
+        let future = TaskFuture::new(tasks.len());
 
         self.push_batch(tasks.to_owned(), future.clone());
         future
     }
 }
 
-impl Drop for BatchQueue {
+impl Drop for Queue {
     fn drop(&mut self) {
         let mut current = self.head.load(Ordering::Relaxed);
         while !current.is_null() {

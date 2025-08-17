@@ -3,20 +3,20 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::{future::WorkFuture, queue::BatchQueue};
+use crate::{queue::Queue, task_future::TaskFuture};
 
-pub fn spawn_worker(id: usize, queue: Arc<BatchQueue>) -> JoinHandle<()> {
+pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {
-            let mut current_batch_ptr: *const WorkFuture = std::ptr::null();
+            let mut current_batch_ptr: *const TaskFuture = std::ptr::null();
             let mut current_batch_count = 0usize;
 
             loop {
                 let shutdown = queue.wait_for_work();
 
                 while let Some((work_item, batch_future)) = queue.claim_work() {
-                    let batch_ptr = batch_future as *const WorkFuture;
+                    let batch_ptr = batch_future as *const TaskFuture;
 
                     // check if same batch
                     if current_batch_ptr != batch_ptr {

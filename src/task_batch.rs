@@ -2,19 +2,19 @@ use std::sync::atomic::Ordering;
 
 use crate::{
     TaskItem,
-    future::WorkFuture,
     padded_type::{PaddedAtomicPtr, PaddedAtomicUsize},
+    task_future::TaskFuture,
 };
 
 pub struct TaskBatch {
     next_item: PaddedAtomicUsize,
     pub items: Vec<TaskItem>,
-    pub future: WorkFuture,
+    pub future: TaskFuture,
     pub next: PaddedAtomicPtr<TaskBatch>,
 }
 
 impl TaskBatch {
-    pub fn new(items: Vec<TaskItem>, future: WorkFuture) -> Self {
+    pub fn new(items: Vec<TaskItem>, future: TaskFuture) -> Self {
         TaskBatch {
             next_item: PaddedAtomicUsize::new(0),
             items,

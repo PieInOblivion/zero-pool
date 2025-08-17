@@ -3,7 +3,8 @@ use std::{
     time::{Duration, Instant},
 };
 use zero_pool::{
-    zp_define_task_fn, zp_submit_batch_mixed, zp_task_params, zp_write, TaskFnPointer, TaskParamPointer, ZeroPool
+    TaskFnPointer, TaskParamPointer, ZeroPool, zp_define_task_fn, zp_submit_batch_mixed,
+    zp_task_params, zp_write,
 };
 
 // Define task parameter structures
