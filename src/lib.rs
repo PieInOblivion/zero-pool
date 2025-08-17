@@ -10,7 +10,7 @@
 //! ## Safety
 //!
 //! This library achieves high performance through raw pointer usage. Users must ensure:
-//! - Parameter structs remain valid until `WorkFuture::wait()` completes
+//! - Parameter structs remain valid until `TaskFuture::wait()` completes
 //! - Result pointers remain valid until task execution finishes  
 //! - Task functions are thread-safe and data-race free
 //! - No undefined behavior in unsafe task code
