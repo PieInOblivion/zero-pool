@@ -69,6 +69,7 @@ pub type TaskItem = (TaskFnPointer, TaskParamPointer);
 ///
 /// This is a performance optimization that pre-converts parameter
 /// pointers, avoiding repeated conversions during batch submission.
+/// Useful when you need to submit the same batch multiple times.
 ///
 /// # Examples
 ///
@@ -85,10 +86,18 @@ pub type TaskItem = (TaskFnPointer, TaskParamPointer);
 ///
 /// let pool = ZeroPool::new();
 /// let mut results = [0u64; 2];
-/// let tasks = [MyTask::new(1, &mut results[0]), MyTask::new(2, &mut results[1])];
+/// let tasks = [
+///     MyTask::new(1, &mut results[0]), 
+///     MyTask::new(2, &mut results[1])
+/// ];
+/// 
+/// // Convert once, reuse multiple times
 /// let work_items = uniform_tasks_to_pointers(my_task_fn, &tasks);
-/// let future = pool.submit_raw_task_batch(&work_items);
-/// future.wait();
+/// 
+/// for _ in 0..5 {
+///     let future = pool.submit_raw_task_batch(&work_items);
+///     future.wait();
+/// }
 /// ```
 #[inline]
 pub fn uniform_tasks_to_pointers<T>(task_fn: TaskFnPointer, params_vec: &[T]) -> Vec<TaskItem> {

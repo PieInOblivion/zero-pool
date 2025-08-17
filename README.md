@@ -60,14 +60,14 @@ zp_task_params! {
 Defines a task function that safely dereferences the parameter struct.
 
 ```rust
-use zero_pool::zp_define_task_fn;
+use zero_pool::{zp_define_task_fn, zp_write};
 
 zp_define_task_fn!(sum_task, SumParams, |params| {
     let mut sum = 0u64;
     for i in 0..params.iterations {
         sum += i as u64;
     }
-    unsafe { *params.result = sum; }
+    zp_write!(params.result, sum);
 });
 ```
 

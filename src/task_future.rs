@@ -6,8 +6,10 @@ use crate::padded_type::PaddedAtomicUsize;
 
 /// A future that tracks completion of submitted tasks
 /// 
-/// TaskFuture provides both blocking and non-blocking ways to wait for
+/// `TaskFuture` provides both blocking and non-blocking ways to wait for
 /// task completion, with efficient condition variable notification.
+/// Tasks can be checked for completion, waited on indefinitely, or 
+/// waited on with a timeout.
 #[derive(Clone)]
 pub struct TaskFuture {
     remaining: Arc<PaddedAtomicUsize>,
