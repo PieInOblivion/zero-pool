@@ -40,7 +40,7 @@ mod macros;
 mod padded_type;
 mod pool;
 mod queue;
-mod work_batch;
+mod task_batch;
 mod worker;
 
 pub use pool::ZeroPool;
@@ -63,7 +63,7 @@ pub type TaskParamPointer = *const ();
 ///
 /// This tuple represents a single unit of work that can be
 /// executed by a worker thread.
-pub type WorkItem = (TaskFnPointer, TaskParamPointer);
+pub type TaskItem = (TaskFnPointer, TaskParamPointer);
 
 /// Convert a slice of uniform task parameters to work items
 ///
@@ -73,15 +73,25 @@ pub type WorkItem = (TaskFnPointer, TaskParamPointer);
 /// # Examples
 ///
 /// ```rust
-/// use zero_pool::{ZeroPool, uniform_tasks_to_pointers};
+/// use zero_pool::{ZeroPool, uniform_tasks_to_pointers, zp_task_params, zp_define_task_fn, zp_write};
+///
+/// zp_task_params! {
+///     MyTask { value: u64, result: *mut u64 }
+/// }
+///
+/// zp_define_task_fn!(my_task_fn, MyTask, |params| {
+///     zp_write!(params.result, params.value * 2);
+/// });
 ///
 /// let pool = ZeroPool::new();
-/// let tasks = vec![MyTask::new(1), MyTask::new(2)];
+/// let mut results = [0u64; 2];
+/// let tasks = [MyTask::new(1, &mut results[0]), MyTask::new(2, &mut results[1])];
 /// let work_items = uniform_tasks_to_pointers(my_task_fn, &tasks);
-/// pool.submit_raw_task_batch(&work_items);
+/// let future = pool.submit_raw_task_batch(&work_items);
+/// future.wait();
 /// ```
 #[inline]
-pub fn uniform_tasks_to_pointers<T>(task_fn: TaskFnPointer, params_vec: &[T]) -> Vec<WorkItem> {
+pub fn uniform_tasks_to_pointers<T>(task_fn: TaskFnPointer, params_vec: &[T]) -> Vec<TaskItem> {
     params_vec
         .iter()
         .map(|params| (task_fn, params as *const T as TaskParamPointer))

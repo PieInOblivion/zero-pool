@@ -50,19 +50,6 @@ impl WorkFuture {
     ///
     /// Returns `true` if all tasks completed within the timeout,
     /// `false` if the timeout was reached first.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use std::time::Duration;
-    ///
-    /// let future = pool.submit_task(my_task, &params);
-    /// if future.wait_timeout(Duration::from_secs(5)) {
-    ///     println!("Task completed");
-    /// } else {
-    ///     println!("Task timed out");
-    /// }
-    /// ```
     pub fn wait_timeout(self, timeout: Duration) -> bool {
         if self.is_complete() {
             return true;

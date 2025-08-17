@@ -145,7 +145,7 @@ let pool = ZeroPool::new();
 let mut result = 0u64;
 let task = MyTask::new(1000, &mut result);
 
-let future = pool.submit_task(&task, my_task);
+let future = pool.submit_task(my_task, &task);
 future.wait();
 
 println!("Result: {}", result);
@@ -241,38 +241,21 @@ println!("4 * 7 = {}", multiply_result);
 For hot paths where you submit the same tasks repeatedly, you can pre-convert tasks to avoid repeated pointer conversions:
 
 ```rust
-use zero_pool::{ZeroPool, zp_task_params, zp_define_task_fn, zp_write, uniform_tasks_to_pointers};
-
-zp_task_params! {
-    HotTask {
-        work: usize,
-        result: *mut u64,
-    }
-}
-
-zp_define_task_fn!(hot_task_fn, HotTask, |params| {
-    let mut sum = 0u64;
-    for i in 0..params.work {
-        sum = sum.wrapping_add(i as u64);
-    }
-    zp_write!(params.result, sum);
-});
-
 let pool = ZeroPool::new();
 let mut results = vec![0u64; 100];
 
-// Create tasks once
 let tasks: Vec<_> = results.iter_mut().map(|result| {
     HotTask::new(1000, result)
 }).collect();
 
-// Convert once, reuse many times
+// Convert once, reuse multiple times
 let tasks_converted = uniform_tasks_to_pointers(hot_task_fn, &tasks);
 
-// Submit multiple times with zero conversion overhead
-for _ in 0..10 {
-    results.fill(0); // Reset results
-    let future = pool.submit_raw_task_batch(&tasks_converted);
-    future.wait();
-}
+// Submit multiple batches with zero conversion overhead
+let futures: Vec<_> = (0..3).map(|_| {
+    pool.submit_raw_task_batch(&tasks_converted)
+}).collect();
+
+// Wait for all
+futures.into_iter().for_each(|f| f.wait());
 ```

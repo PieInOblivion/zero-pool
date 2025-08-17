@@ -1,7 +1,7 @@
 use crate::padded_type::PaddedAtomicPtr;
-use crate::work_batch::WorkBatch;
+use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, future::WorkFuture};
-use crate::{TaskParamPointer, WorkItem};
+use crate::{TaskItem, TaskParamPointer};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 
@@ -9,8 +9,8 @@ unsafe impl Send for BatchQueue {}
 unsafe impl Sync for BatchQueue {}
 
 pub struct BatchQueue {
-    head: PaddedAtomicPtr<WorkBatch>,
-    tail: PaddedAtomicPtr<WorkBatch>,
+    head: PaddedAtomicPtr<TaskBatch>,
+    tail: PaddedAtomicPtr<TaskBatch>,
 
     shutdown: AtomicBool,
 
@@ -20,7 +20,7 @@ pub struct BatchQueue {
 
 impl BatchQueue {
     pub fn new() -> Self {
-        let dummy = Box::into_raw(Box::new(WorkBatch::new(Vec::new(), WorkFuture::new(0))));
+        let dummy = Box::into_raw(Box::new(TaskBatch::new(Vec::new(), WorkFuture::new(0))));
 
         BatchQueue {
             head: PaddedAtomicPtr::new(dummy),
@@ -31,8 +31,8 @@ impl BatchQueue {
         }
     }
 
-    pub fn push_batch(&self, items: Vec<WorkItem>, future: WorkFuture) {
-        let new_batch = Box::into_raw(Box::new(WorkBatch::new(items, future)));
+    pub fn push_batch(&self, items: Vec<TaskItem>, future: WorkFuture) {
+        let new_batch = Box::into_raw(Box::new(TaskBatch::new(items, future)));
 
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
 
@@ -45,7 +45,7 @@ impl BatchQueue {
         self.condvar.notify_all();
     }
 
-    pub fn claim_work(&self) -> Option<(WorkItem, &WorkFuture)> {
+    pub fn claim_work(&self) -> Option<(TaskItem, &WorkFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
@@ -117,7 +117,7 @@ impl BatchQueue {
         future
     }
 
-    pub fn push_task_batch(&self, tasks: &[WorkItem]) -> WorkFuture {
+    pub fn push_task_batch(&self, tasks: &[TaskItem]) -> WorkFuture {
         if tasks.is_empty() {
             return WorkFuture::new(0);
         }

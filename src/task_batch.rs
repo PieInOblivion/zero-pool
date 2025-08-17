@@ -1,21 +1,21 @@
 use std::sync::atomic::Ordering;
 
 use crate::{
-    WorkItem,
+    TaskItem,
     future::WorkFuture,
     padded_type::{PaddedAtomicPtr, PaddedAtomicUsize},
 };
 
-pub struct WorkBatch {
+pub struct TaskBatch {
     next_item: PaddedAtomicUsize,
-    pub items: Vec<WorkItem>,
+    pub items: Vec<TaskItem>,
     pub future: WorkFuture,
-    pub next: PaddedAtomicPtr<WorkBatch>,
+    pub next: PaddedAtomicPtr<TaskBatch>,
 }
 
-impl WorkBatch {
-    pub fn new(items: Vec<WorkItem>, future: WorkFuture) -> Self {
-        WorkBatch {
+impl TaskBatch {
+    pub fn new(items: Vec<TaskItem>, future: WorkFuture) -> Self {
+        TaskBatch {
             next_item: PaddedAtomicUsize::new(0),
             items,
             future,
@@ -24,7 +24,7 @@ impl WorkBatch {
     }
 
     #[inline]
-    pub fn claim_next_item(&self) -> Option<WorkItem> {
+    pub fn claim_next_item(&self) -> Option<TaskItem> {
         let item_index = self.next_item.fetch_add(1, Ordering::Relaxed);
         self.items.get(item_index).copied()
     }

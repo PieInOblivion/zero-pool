@@ -42,7 +42,7 @@ macro_rules! zp_task_params {
 ///
 /// # Examples
 /// ```rust
-/// use zero_pool::{zp_define_task_fn, zp_task_params};
+/// use zero_pool::{zp_define_task_fn, zp_task_params, zp_write};
 ///
 /// zp_task_params! {
 ///     ComputeTask {
@@ -56,7 +56,7 @@ macro_rules! zp_task_params {
 ///     for i in 0..params.iterations {
 ///         sum = sum.wrapping_add(i as u64);
 ///     }
-///     unsafe { *params.result = sum; }
+///     zp_write!(params.result, sum);
 /// });
 /// ```
 #[macro_export]
@@ -75,7 +75,11 @@ macro_rules! zp_define_task_fn {
 ///
 /// # Examples
 /// ```rust
-/// use zero_pool::zp_write;
+/// use zero_pool::{zp_write, zp_define_task_fn, zp_task_params};
+///
+/// zp_task_params! {
+///     MyTask { value: u64, result: *mut u64 }
+/// }
 ///
 /// zp_define_task_fn!(my_task, MyTask, |params| {
 ///     let result = 42u64;
@@ -97,7 +101,11 @@ macro_rules! zp_write {
 ///
 /// # Examples
 /// ```rust
-/// use zero_pool::zp_write_indexed;
+/// use zero_pool::{zp_write_indexed, zp_define_task_fn, zp_task_params};
+///
+/// zp_task_params! {
+///     BatchTask { index: usize, results: *mut Vec<u64> }
+/// }
 ///
 /// zp_define_task_fn!(batch_task, BatchTask, |params| {
 ///     let sum = 42u64;
@@ -120,8 +128,27 @@ macro_rules! zp_write_indexed {
 ///
 /// # Examples
 /// ```rust
-/// use zero_pool::zp_submit_batch_mixed;
+/// use zero_pool::{ZeroPool, zp_submit_batch_mixed, zp_task_params, zp_define_task_fn, zp_write};
 ///
+/// zp_task_params! {
+///     Task1 { value: u64, result: *mut u64 }
+/// }
+/// zp_task_params! {
+///     Task2 { value: u64, result: *mut u64 }
+/// }
+///
+/// zp_define_task_fn!(task1_fn, Task1, |params| {
+///     zp_write!(params.result, params.value * 2);
+/// });
+/// zp_define_task_fn!(task2_fn, Task2, |params| {
+///     zp_write!(params.result, params.value * 3);
+/// });
+///
+/// let pool = ZeroPool::new();
+/// let mut result1 = 0u64;
+/// let mut result2 = 0u64;
+/// let task1 = Task1::new(5, &mut result1);
+/// let task2 = Task2::new(7, &mut result2);
 /// let future = zp_submit_batch_mixed!(pool, [
 ///     (&task1, task1_fn),
 ///     (&task2, task2_fn),
@@ -131,45 +158,12 @@ macro_rules! zp_write_indexed {
 #[macro_export]
 macro_rules! zp_submit_batch_mixed {
     ($pool:expr, [$( ($params:expr, $task_fn:ident) ),* $(,)?]) => {{
-        let tasks: Vec<$crate::WorkItem> = vec![
+        let tasks: Vec<$crate::TaskItem> = vec![
             $(
                 ($task_fn as $crate::TaskFnPointer, $params as *const _ as $crate::TaskParamPointer)
             ),*
         ];
 
         $pool.submit_raw_task_batch(&tasks)
-    }};
-}
-
-/// Convert a vector of mixed task types to work item pointers
-///
-/// This macro takes a vector containing (task_fn, params) tuples of potentially
-/// different types and converts them to the uniform pointer format needed for
-/// raw batch submission. This is useful when you have pre-built task collections
-/// with mixed parameter types.
-///
-/// # Examples
-/// ```rust
-/// use zero_pool::zp_mixed_tasks_to_pointers;
-///
-/// let mixed_tasks = vec![
-///     (task1_fn, &task1_params),
-///     (task2_fn, &task2_params),
-/// ];
-/// let work_items = zp_mixed_tasks_to_pointers!(mixed_tasks);
-/// let future = pool.submit_raw_task_batch(&work_items);
-/// ```
-#[macro_export]
-macro_rules! zp_mixed_tasks_to_pointers {
-    ($tasks_vec:expr) => {{
-        $tasks_vec
-            .iter()
-            .map(|(task_fn, params)| {
-                (
-                    *task_fn as $crate::TaskFnPointer,
-                    params as *const _ as $crate::TaskParamPointer,
-                )
-            })
-            .collect::<Vec<$crate::WorkItem>>()
     }};
 }
