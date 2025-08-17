@@ -1,15 +1,40 @@
-// Zero-Pool: Ultra-High Performance Thread Pool
-// A thread pool designed for maximum performance through:
-// - Zero-overhead task submission via raw pointers
-// - Result-via-parameters pattern (no result transport)
-// - Per-worker queues to minimize contention
-// - Function pointer dispatch (no trait objects)
-//
-// Safety
-// This library uses raw pointers for maximum performance. You must ensure:
-// - Parameter structs live until `future.wait()` completes
-// - Result pointers remain valid until task completion
-// - No data races in your task functions
+//! # Zero-Pool: Ultra-High Performance Thread Pool
+//!
+//! A thread pool implementation designed for maximum performance through:
+//! - Zero-overhead task submission via raw pointers  
+//! - Result-via-parameters pattern (no result transport)
+//! - Single global queue with optimal load balancing
+//! - Function pointer dispatch (no trait objects)
+//! - Lock-free queue operations with event-based worker coordination
+//!
+//! ## Safety
+//!
+//! This library achieves high performance through raw pointer usage. Users must ensure:
+//! - Parameter structs remain valid until `WorkFuture::wait()` completes
+//! - Result pointers remain valid until task execution finishes  
+//! - Task functions are thread-safe and data-race free
+//! - No undefined behavior in unsafe task code
+//!
+//! ## Example
+//!
+//! ```rust
+//! use zero_pool::{ZeroPool, zp_task_params, zp_define_task_fn, zp_write};
+//!
+//! zp_task_params! {
+//!     MyTask { value: u64, result: *mut u64 }
+//! }
+//!
+//! zp_define_task_fn!(my_task, MyTask, |params| {
+//!     zp_write!(params.result, params.value * 2);
+//! });
+//!
+//! let pool = ZeroPool::new();
+//! let mut result = 0u64;
+//! let task = MyTask::new(42, &mut result);
+//! pool.submit_task(my_task, &task).wait();
+//! assert_eq!(result, 84);
+//! ```
+
 mod future;
 mod macros;
 mod padded_type;
@@ -22,16 +47,39 @@ pub use pool::ZeroPool;
 
 pub use future::WorkFuture;
 
-// task function signature, takes raw pointer to parameters
+/// Function pointer type for task execution
+///
+/// Tasks receive a raw pointer to their parameter struct and must
+/// cast it to the appropriate type for safe access.
 pub type TaskFnPointer = fn(*const ());
 
-// pointer to task parameter struct
+/// Raw pointer to task parameter struct
+///
+/// This is type-erased for uniform storage but must be cast back
+/// to the original parameter type within the task function.
 pub type TaskParamPointer = *const ();
 
-// tuple of the two creates one work item
+/// A work item containing a task function and its parameters
+///
+/// This tuple represents a single unit of work that can be
+/// executed by a worker thread.
 pub type WorkItem = (TaskFnPointer, TaskParamPointer);
 
-// Convert uniform tasks to pointer format
+/// Convert a slice of uniform task parameters to work items
+///
+/// This is a performance optimization that pre-converts parameter
+/// pointers, avoiding repeated conversions during batch submission.
+///
+/// # Examples
+///
+/// ```rust
+/// use zero_pool::{ZeroPool, uniform_tasks_to_pointers};
+///
+/// let pool = ZeroPool::new();
+/// let tasks = vec![MyTask::new(1), MyTask::new(2)];
+/// let work_items = uniform_tasks_to_pointers(my_task_fn, &tasks);
+/// pool.submit_raw_task_batch(&work_items);
+/// ```
 #[inline]
 pub fn uniform_tasks_to_pointers<T>(task_fn: TaskFnPointer, params_vec: &[T]) -> Vec<WorkItem> {
     params_vec

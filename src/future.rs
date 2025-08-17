@@ -20,12 +20,19 @@ impl WorkFuture {
         }
     }
 
-    // check if all tasks are complete
+    /// Check if all tasks are complete without blocking
+    ///
+    /// Returns `true` if all tasks have finished execution.
+    /// This is a non-blocking operation using atomic loads.
     pub fn is_complete(&self) -> bool {
         self.remaining.load(Ordering::Acquire) == 0
     }
 
-    // wait for all tasks to complete
+    /// Wait for all tasks to complete
+    ///
+    /// This method blocks the current thread until all tasks finish.
+    /// It uses efficient condition variable notification to minimize
+    /// CPU usage while waiting.
     pub fn wait(self) {
         if self.is_complete() {
             return;
@@ -39,7 +46,23 @@ impl WorkFuture {
         }
     }
 
-    // wait for all tasks with timeout
+    /// Wait for all tasks to complete with a timeout
+    ///
+    /// Returns `true` if all tasks completed within the timeout,
+    /// `false` if the timeout was reached first.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::time::Duration;
+    ///
+    /// let future = pool.submit_task(my_task, &params);
+    /// if future.wait_timeout(Duration::from_secs(5)) {
+    ///     println!("Task completed");
+    /// } else {
+    ///     println!("Task timed out");
+    /// }
+    /// ```
     pub fn wait_timeout(self, timeout: Duration) -> bool {
         if self.is_complete() {
             return true;
@@ -58,7 +81,11 @@ impl WorkFuture {
         true
     }
 
-    // get remaining task count
+    /// Get the approximate number of remaining incomplete tasks
+    ///
+    /// This provides a way to monitor progress of task batches.
+    /// The count is approximate due to relaxed atomic ordering.
+    /// Not for precise synchronization.
     pub fn remaining_count(&self) -> usize {
         self.remaining.load(Ordering::Relaxed)
     }

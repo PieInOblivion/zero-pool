@@ -3,7 +3,7 @@ use std::{
     sync::atomic::{AtomicPtr, AtomicUsize},
 };
 
-// an atomic usize padded to fill one cache line, 64 bytes
+// a generic type padded to fill one cache line, 64 bytes
 // this prevents false sharing when multiple threads access different atomics
 #[repr(align(64))]
 pub struct PaddedType<T, const PAD: usize> {

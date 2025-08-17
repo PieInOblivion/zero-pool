@@ -92,7 +92,7 @@ zp_define_task_fn!(my_task, MyTask, |params| {
 Safely writes a value to a specific index in a Vec or array via raw pointer, useful for batch processing where each task writes to a different index.
 
 ```rust
-use zero_pool::{zp_task_params, zp_define_task_fn, zp_write_indexed};
+use zero_pool::{ZeroPool, zp_task_params, zp_define_task_fn, zp_write_indexed};
 
 zp_task_params! {
     BatchTask {
@@ -111,7 +111,7 @@ zp_define_task_fn!(batch_task, BatchTask, |params| {
 });
 
 // Usage with a pre-allocated vector
-let pool = zero_pool::new();
+let pool = ZeroPool::new();
 let mut results = vec![0u64; 100];
 let tasks: Vec<_> = (0..100).map(|i| {
     BatchTask::new(i, 1000, &mut results)
@@ -124,7 +124,7 @@ future.wait();
 ### Submitting a Single Task
 
 ```rust
-use zero_pool::{zp_task_params, zp_define_task_fn, zp_write};
+use zero_pool::{ZeroPool, zp_task_params, zp_define_task_fn, zp_write};
 
 zp_task_params! {
     MyTask {
@@ -141,7 +141,7 @@ zp_define_task_fn!(my_task, MyTask, |params| {
     zp_write!(params.result, sum);
 });
 
-let pool = zero_pool::new();
+let pool = ZeroPool::new();
 let mut result = 0u64;
 let task = MyTask::new(1000, &mut result);
 
@@ -156,7 +156,7 @@ println!("Result: {}", result);
 Submits multiple tasks of the same type to the thread pool.
 
 ```rust
-use zero_pool::{zp_task_params, zp_define_task_fn, zp_write};
+use zero_pool::{ZeroPool, zp_task_params, zp_define_task_fn, zp_write};
 
 zp_task_params! {
     ComputeTask {
@@ -173,7 +173,7 @@ zp_define_task_fn!(compute_task, ComputeTask, |params| {
     zp_write!(params.result, sum);
 });
 
-let pool = zero_pool::new();
+let pool = ZeroPool::new();
 let mut results = vec![0u64; 100];
 
 let tasks: Vec<_> = results.iter_mut().enumerate().map(|(i, result)| {
@@ -191,7 +191,7 @@ println!("First result: {}", results[0]);
 Submits multiple tasks of different types to the thread pool.
 
 ```rust
-use zero_pool::{zp_submit_batch_mixed, zp_task_params, zp_define_task_fn, zp_write};
+use zero_pool::{ZeroPool, zp_submit_batch_mixed, zp_task_params, zp_define_task_fn, zp_write};
 
 // First task type
 zp_task_params! {
@@ -219,7 +219,7 @@ zp_define_task_fn!(multiply_task, MultiplyTask, |params| {
     zp_write!(params.result, params.x * params.y);
 });
 
-let pool = zero_pool::new();
+let pool = ZeroPool::new();
 let mut add_result = 0u64;
 let mut multiply_result = 0u64;
 
@@ -241,7 +241,7 @@ println!("4 * 7 = {}", multiply_result);
 For hot paths where you submit the same tasks repeatedly, you can pre-convert tasks to avoid repeated pointer conversions:
 
 ```rust
-use zero_pool::{zp_task_params, zp_define_task_fn, zp_write};
+use zero_pool::{ZeroPool, zp_task_params, zp_define_task_fn, zp_write, uniform_tasks_to_pointers};
 
 zp_task_params! {
     HotTask {
@@ -258,7 +258,7 @@ zp_define_task_fn!(hot_task_fn, HotTask, |params| {
     zp_write!(params.result, sum);
 });
 
-let pool = zero_pool::new();
+let pool = ZeroPool::new();
 let mut results = vec![0u64; 100];
 
 // Create tasks once
@@ -267,7 +267,7 @@ let tasks: Vec<_> = results.iter_mut().map(|result| {
 }).collect();
 
 // Convert once, reuse many times
-let tasks_converted = zero_pool::uniform_tasks_to_pointers(hot_task_fn, &tasks);
+let tasks_converted = uniform_tasks_to_pointers(hot_task_fn, &tasks);
 
 // Submit multiple times with zero conversion overhead
 for _ in 0..10 {
