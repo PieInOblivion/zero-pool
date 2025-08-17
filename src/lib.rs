@@ -87,13 +87,13 @@ pub type TaskItem = (TaskFnPointer, TaskParamPointer);
 /// let pool = ZeroPool::new();
 /// let mut results = [0u64; 2];
 /// let tasks = [
-///     MyTask::new(1, &mut results[0]), 
+///     MyTask::new(1, &mut results[0]),
 ///     MyTask::new(2, &mut results[1])
 /// ];
-/// 
+///
 /// // Convert once, reuse multiple times
 /// let work_items = uniform_tasks_to_pointers(my_task_fn, &tasks);
-/// 
+///
 /// for _ in 0..5 {
 ///     let future = pool.submit_raw_task_batch(&work_items);
 ///     future.wait();

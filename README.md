@@ -236,6 +236,58 @@ println!("5 + 3 = {}", add_result);
 println!("4 * 7 = {}", multiply_result);
 ```
 
+### Submitting Multiple Independent Tasks
+
+You can submit individual tasks, uniform batches, and mixed batches in parallel:
+
+```rust
+use zero_pool::{ZeroPool, zp_submit_batch_mixed, zp_task_params, zp_define_task_fn, zp_write};
+
+// Define task types (assuming compute_task is already defined)
+zp_task_params! {
+    MultiplyParams { x: u64, y: u64, result: *mut u64 }
+}
+
+zp_define_task_fn!(multiply_task, MultiplyParams, |params| {
+    zp_write!(params.result, params.x * params.y);
+});
+
+let pool = ZeroPool::new();
+
+// Individual tasks - separate memory locations
+let mut single_result = 0u64;
+let single_task = ComputeParams::new(1000, &mut single_result);
+
+// Uniform batch - separate memory from above
+let mut batch_results = vec![0u64; 50];
+let batch_tasks: Vec<_> = batch_results.iter_mut().enumerate()
+    .map(|(i, result)| ComputeParams::new(500 + i, result))
+    .collect();
+
+// Mixed batch - separate memory from above  
+let mut add_result = 0u64;
+let mut multiply_result = 0u64;
+let compute_mixed = ComputeParams::new(2000, &mut add_result);
+let multiply_mixed = MultiplyParams::new(6, 7, &mut multiply_result);
+
+// Submit all work immediately (all start executing in parallel)
+let future1 = pool.submit_task(compute_task, &single_task);
+let future2 = pool.submit_batch_uniform(compute_task, &batch_tasks);
+let future3 = zp_submit_batch_mixed!(pool, [
+    (&compute_mixed, compute_task),
+    (&multiply_mixed, multiply_task),
+]);
+
+// Wait on them in any order - they're all running independently
+future1.wait();
+future2.wait(); 
+future3.wait();
+
+println!("Single: {}", single_result);
+println!("Batch completed: {} tasks", batch_results.len());
+println!("Mixed: {} and {}", add_result, multiply_result);
+```
+
 ### Performance Optimization: Pre-converted Tasks
 
 For hot paths where you submit the same tasks repeatedly, you can pre-convert tasks to avoid repeated pointer conversions:
@@ -256,6 +308,9 @@ let futures: Vec<_> = (0..3).map(|_| {
     pool.submit_raw_task_batch(&tasks_converted)
 }).collect();
 
-// Wait for all
-futures.into_iter().for_each(|f| f.wait());
+// Submit multiple batches with zero conversion overhead
+for _ in 0..3 {
+    let future = pool.submit_raw_task_batch(&tasks_converted);
+    future.wait();
+}
 ```
