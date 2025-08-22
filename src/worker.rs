@@ -36,7 +36,6 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
                 // flush any remaining completions when no more work
                 if current_batch_count > 0 {
                     unsafe { (*current_batch_ptr).complete_many(current_batch_count) };
-                    current_batch_count = 0;
                 }
 
                 if shutdown {
