@@ -13,7 +13,9 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
             let mut current_batch_count = 0usize;
 
             loop {
-                let shutdown = queue.wait_for_work();
+                if queue.wait_for_work() {
+                    break;
+                }
 
                 while let Some((work_item, batch_future)) = queue.claim_work() {
                     let batch_ptr = batch_future as *const TaskFuture;
@@ -37,10 +39,6 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
                 if current_batch_count > 0 {
                     unsafe { (*current_batch_ptr).complete_many(current_batch_count) };
                     current_batch_count = 0;
-                }
-
-                if shutdown {
-                    break;
                 }
             }
         })
