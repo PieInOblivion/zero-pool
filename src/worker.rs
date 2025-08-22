@@ -13,7 +13,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
             let mut current_batch_count = 0usize;
 
             loop {
-                if queue.wait_for_work() {
+                if queue.wait_for_signal() {
                     break;
                 }
 
@@ -38,7 +38,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
                 // flush any remaining completions when no more work
                 if current_batch_count > 0 {
                     unsafe { (*current_batch_ptr).complete_many(current_batch_count) };
-                    current_batch_count = 0;
+                    // no reset needed as inner loop handles batch switches
                 }
             }
         })

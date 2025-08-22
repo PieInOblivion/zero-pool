@@ -69,7 +69,7 @@ impl Queue {
     }
 
     // bool returns if shutdown has been set
-    pub fn wait_for_work(&self) -> bool {
+    pub fn wait_for_signal(&self) -> bool {
         let mut guard = self.condvar_mutex.lock().unwrap();
 
         loop {
