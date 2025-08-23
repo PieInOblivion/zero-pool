@@ -20,16 +20,16 @@
 //! ```rust
 //! use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
 //!
-//! struct MyTaskStruct { value: u64, result: *mut u64 }
+//! struct MyTaskParams { value: u64, result: *mut u64 }
 //!
-//! zp_define_task_fn!(my_task, MyTaskStruct, |params| {
+//! zp_define_task_fn!(my_task, MyTaskParams, |params| {
 //!     zp_write!(params.result, params.value * 2);
 //! });
 //!
 //! let pool = ZeroPool::new();
 //! let mut result = 0u64;
-//! let my_task_struct = MyTaskStruct { value: 42, result: &mut result };
-//! pool.submit_task(my_task, &my_task_struct).wait();
+//! let task_params = MyTaskParams { value: 42, result: &mut result };
+//! pool.submit_task(my_task, &task_params).wait();
 //! assert_eq!(result, 84);
 //! ```
 

@@ -71,20 +71,21 @@ impl ZeroPool {
     /// ```rust
     /// use zero_pool::{ZeroPool, TaskFnPointer, TaskParamPointer, zp_define_task_fn, zp_write};
     ///
-    /// struct MyTaskStruct { value: u64, result: *mut u64 }
+    /// struct MyTaskParams { value: u64, result: *mut u64 }
     ///
-    /// zp_define_task_fn!(my_task, MyTaskStruct, |params| {
+    /// zp_define_task_fn!(my_task, MyTaskParams, |params| {
     ///     zp_write!(params.result, params.value * 2);
     /// });
     ///
     /// let pool = ZeroPool::new();
     /// let mut result = 0u64;
-    /// let params = MyTaskStruct { value: 42, result: &mut result };
+    /// let task_params = MyTaskParams { value: 42, result: &mut result };
     /// let future = pool.submit_raw_task(
     ///     my_task as TaskFnPointer,
-    ///     &params as *const _ as TaskParamPointer
+    ///     &task_params as *const _ as TaskParamPointer
     /// );
     /// future.wait();
+    /// assert_eq!(result, 84);
     /// ```
     pub fn submit_raw_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> TaskFuture {
         self.queue.push_single_task(task_fn, params)
@@ -101,21 +102,23 @@ impl ZeroPool {
     /// ```rust
     /// use zero_pool::{ZeroPool, uniform_tasks_to_pointers, zp_define_task_fn, zp_write};
     ///
-    /// struct MyTaskStruct { value: u64, result: *mut u64 }
+    /// struct MyTaskParams { value: u64, result: *mut u64 }
     ///
-    /// zp_define_task_fn!(my_task, MyTaskStruct, |params| {
+    /// zp_define_task_fn!(my_task, MyTaskParams, |params| {
     ///     zp_write!(params.result, params.value * 2);
     /// });
     ///
     /// let pool = ZeroPool::new();
-    /// let mut results = [0u64; 2];
-    /// let params_vec = [
-    ///     MyTaskStruct { value: 1, result: &mut results[0] },
-    ///     MyTaskStruct { value: 2, result: &mut results[1] }
+    /// let mut results = vec![0u64; 2];
+    /// let task_params = vec![
+    ///     MyTaskParams { value: 1, result: &mut results[0] },
+    ///     MyTaskParams { value: 2, result: &mut results[1] }
     /// ];
-    /// let tasks = uniform_tasks_to_pointers(my_task, &params_vec);
+    /// let tasks = uniform_tasks_to_pointers(my_task, &task_params);
     /// let future = pool.submit_raw_task_batch(&tasks);
     /// future.wait();
+    /// assert_eq!(results[0], 2);
+    /// assert_eq!(results[1], 4);
     /// ```
     pub fn submit_raw_task_batch(&self, tasks: &[TaskItem]) -> TaskFuture {
         self.queue.push_task_batch(tasks)
@@ -132,15 +135,15 @@ impl ZeroPool {
     /// ```rust
     /// use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
     ///
-    /// struct MyTaskStruct { value: u64, result: *mut u64 }
+    /// struct MyTaskParams { value: u64, result: *mut u64 }
     ///
-    /// zp_define_task_fn!(my_task_fn, MyTaskStruct, |params| {
+    /// zp_define_task_fn!(my_task_fn, MyTaskParams, |params| {
     ///     zp_write!(params.result, params.value * 2);
     /// });
     ///
     /// let pool = ZeroPool::new();
     /// let mut result = 0u64;
-    /// let task_params = MyTaskStruct { value: 42, result: &mut result };
+    /// let task_params = MyTaskParams { value: 42, result: &mut result };
     /// let future = pool.submit_task(my_task_fn, &task_params);
     /// future.wait();
     /// assert_eq!(result, 84);
@@ -161,19 +164,22 @@ impl ZeroPool {
     /// ```rust
     /// use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
     ///
-    /// struct MyTaskStruct { value: u64, result: *mut u64 }
+    /// struct MyTaskParams { value: u64, result: *mut u64 }
     ///
-    /// zp_define_task_fn!(my_task_fn, MyTaskStruct, |params| {
+    /// zp_define_task_fn!(my_task_fn, MyTaskParams, |params| {
     ///     zp_write!(params.result, params.value * 2);
     /// });
     ///
     /// let pool = ZeroPool::new();
     /// let mut results = vec![0u64; 1000];
-    /// let tasks: Vec<_> = (0..1000)
-    ///     .map(|i| MyTaskStruct { value: i as u64, result: &mut results[i] })
+    /// let task_params: Vec<_> = (0..1000)
+    ///     .map(|i| MyTaskParams { value: i as u64, result: &mut results[i] })
     ///     .collect();
-    /// let future = pool.submit_batch_uniform(my_task_fn, &tasks);
+    /// let future = pool.submit_batch_uniform(my_task_fn, &task_params);
     /// future.wait();
+    /// assert_eq!(results[0], 0);
+    /// assert_eq!(results[1], 2);
+    /// assert_eq!(results[999], 1998);
     /// ```
     pub fn submit_batch_uniform<T>(&self, task_fn: TaskFnPointer, params_vec: &[T]) -> TaskFuture {
         let tasks = uniform_tasks_to_pointers(task_fn, params_vec);
