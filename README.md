@@ -36,7 +36,143 @@ test bench_task_overhead_zeropool_optimised       ... bench:      45,036.93 ns/i
 
 ## Example Usage
 
-**Recommended:** Use the type-erasing macros for safe and convenient task submission:
+### Submitting a Single Task
+
+```rust
+use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
+
+struct CalculationParams {
+    iterations: usize,
+    result: *mut u64,
+}
+
+zp_define_task_fn!(calculate_task, CalculationParams, |params| {
+    let mut sum = 0u64;
+    for i in 0..params.iterations {
+        sum += i as u64;
+    }
+    zp_write!(params.result, sum);
+});
+
+let pool = ZeroPool::new();
+let mut result = 0u64;
+let task = CalculationParams { iterations: 1000, result: &mut result };
+
+let future = pool.submit_task(calculate_task, &task);
+future.wait();
+
+println!("Result: {}", result);
+```
+
+### Submitting Uniform Batches
+
+Submits multiple tasks of the same type to the thread pool.
+
+```rust
+use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
+
+struct ComputeParams {
+    work_amount: usize,
+    result: *mut u64,
+}
+
+zp_define_task_fn!(compute_task, ComputeParams, |params| {
+    let mut sum = 0u64;
+    for i in 0..params.work_amount {
+        sum += i as u64;
+    }
+    zp_write!(params.result, sum);
+});
+
+let pool = ZeroPool::new();
+let mut results = vec![0u64; 100];
+
+let tasks: Vec<_> = results.iter_mut().enumerate().map(|(i, result)| {
+    ComputeParams { work_amount: 1000 + i * 10, result }
+}).collect();
+
+let future = pool.submit_batch_uniform(compute_task, &tasks);
+future.wait();
+
+println!("First result: {}", results[0]);
+```
+
+### Submitting Multiple Independent Tasks
+
+You can submit individual tasks, uniform batches, and mixed batches in parallel:
+
+```rust
+use zero_pool::{ZeroPool, zp_submit_batch_mixed, zp_define_task_fn, zp_write};
+
+// Define task types (assuming compute_task is already defined)
+struct MultiplyParams { x: u64, y: u64, result: *mut u64 }
+
+zp_define_task_fn!(multiply_task, MultiplyParams, |params| {
+    zp_write!(params.result, params.x * params.y);
+});
+
+let pool = ZeroPool::new();
+
+// Individual tasks - separate memory locations
+let mut single_result = 0u64;
+let single_task = ComputeParams { work_amount: 1000, result: &mut single_result };
+
+// Uniform batch - separate memory from above
+let mut batch_results = vec![0u64; 50];
+let batch_tasks: Vec<_> = batch_results.iter_mut().enumerate()
+    .map(|(i, result)| ComputeParams { work_amount: 500 + i, result })
+    .collect();
+
+// Mixed batch - separate memory from above  
+let mut add_result = 0u64;
+let mut multiply_result = 0u64;
+let compute_mixed_params = ComputeParams { work_amount: 2000, result: &mut add_result };
+let multiply_mixed_params = MultiplyParams { x: 6, y: 7, result: &mut multiply_result };
+
+// Batches are queued in order but tasks run concurrently
+let future1 = pool.submit_task(compute_task, &single_task);
+let future2 = pool.submit_batch_uniform(compute_task, &batch_tasks);
+let future3 = zp_submit_batch_mixed!(pool, [
+    (&compute_mixed_params, compute_task),
+    (&multiply_mixed_params, multiply_task),
+]);
+
+// Wait on them in any order; completion order is not guaranteed
+future1.wait();
+future2.wait(); 
+future3.wait();
+
+println!("Single: {}", single_result);
+println!("Batch completed: {} tasks", batch_results.len());
+println!("Mixed: {} and {}", add_result, multiply_result);
+```
+
+### Performance Optimisation: Pre-converted Tasks
+
+For hot paths where you submit the same tasks repeatedly, you can pre-convert tasks to avoid repeated pointer conversions:
+
+```rust
+let pool = ZeroPool::new();
+let mut results = vec![0u64; 100];
+
+let tasks: Vec<_> = results.iter_mut().map(|result| {
+    ComputeParams { work_amount: 1000, result }
+}).collect();
+
+// Convert once, reuse multiple times
+let tasks_converted = uniform_tasks_to_pointers(compute_task, &tasks);
+
+// Submit multiple batches with zero conversion overhead
+let futures: Vec<_> = (0..3).map(|_| {
+    pool.submit_raw_task_batch(&tasks_converted)
+}).collect();
+
+// Submit multiple batches with zero conversion overhead
+for _ in 0..3 {
+    let future = pool.submit_raw_task_batch(&tasks_converted);
+    future.wait();
+}
+```
 
 ### `zp_define_task_fn!`
 
@@ -112,67 +248,6 @@ let future = pool.submit_batch_uniform(batch_task, &tasks);
 future.wait();
 ```
 
-### Submitting a Single Task
-
-```rust
-use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
-
-struct CalculationParams {
-    iterations: usize,
-    result: *mut u64,
-}
-
-zp_define_task_fn!(calculate_task, CalculationParams, |params| {
-    let mut sum = 0u64;
-    for i in 0..params.iterations {
-        sum += i as u64;
-    }
-    zp_write!(params.result, sum);
-});
-
-let pool = ZeroPool::new();
-let mut result = 0u64;
-let task = CalculationParams { iterations: 1000, result: &mut result };
-
-let future = pool.submit_task(calculate_task, &task);
-future.wait();
-
-println!("Result: {}", result);
-```
-
-### Submitting Uniform Batches
-
-Submits multiple tasks of the same type to the thread pool.
-
-```rust
-use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
-
-struct ComputeParams {
-    work_amount: usize,
-    result: *mut u64,
-}
-
-zp_define_task_fn!(compute_task, ComputeParams, |params| {
-    let mut sum = 0u64;
-    for i in 0..params.work_amount {
-        sum += i as u64;
-    }
-    zp_write!(params.result, sum);
-});
-
-let pool = ZeroPool::new();
-let mut results = vec![0u64; 100];
-
-let tasks: Vec<_> = results.iter_mut().enumerate().map(|(i, result)| {
-    ComputeParams { work_amount: 1000 + i * 10, result }
-}).collect();
-
-let future = pool.submit_batch_uniform(compute_task, &tasks);
-future.wait();
-
-println!("First result: {}", results[0]);
-```
-
 ### `zp_submit_batch_mixed!`
 
 Submits multiple tasks of different types to the thread pool.
@@ -217,81 +292,4 @@ future.wait();
 
 println!("5 + 3 = {}", add_result);
 println!("4 * 7 = {}", multiply_result);
-```
-
-### Submitting Multiple Independent Tasks
-
-You can submit individual tasks, uniform batches, and mixed batches in parallel:
-
-```rust
-use zero_pool::{ZeroPool, zp_submit_batch_mixed, zp_define_task_fn, zp_write};
-
-// Define task types (assuming compute_task is already defined)
-struct MultiplyParams { x: u64, y: u64, result: *mut u64 }
-
-zp_define_task_fn!(multiply_task, MultiplyParams, |params| {
-    zp_write!(params.result, params.x * params.y);
-});
-
-let pool = ZeroPool::new();
-
-// Individual tasks - separate memory locations
-let mut single_result = 0u64;
-let single_task = ComputeParams { work_amount: 1000, result: &mut single_result };
-
-// Uniform batch - separate memory from above
-let mut batch_results = vec![0u64; 50];
-let batch_tasks: Vec<_> = batch_results.iter_mut().enumerate()
-    .map(|(i, result)| ComputeParams { work_amount: 500 + i, result })
-    .collect();
-
-// Mixed batch - separate memory from above  
-let mut add_result = 0u64;
-let mut multiply_result = 0u64;
-let compute_mixed = ComputeParams { work_amount: 2000, result: &mut add_result };
-let multiply_mixed = MultiplyParams { x: 6, y: 7, result: &mut multiply_result };
-
-// Submit all work immediately (all start executing in parallel)
-let future1 = pool.submit_task(compute_task, &single_task);
-let future2 = pool.submit_batch_uniform(compute_task, &batch_tasks);
-let future3 = zp_submit_batch_mixed!(pool, [
-    (&compute_mixed, compute_task),
-    (&multiply_mixed, multiply_task),
-]);
-
-// Wait on them in any order - they're all running independently
-future1.wait();
-future2.wait(); 
-future3.wait();
-
-println!("Single: {}", single_result);
-println!("Batch completed: {} tasks", batch_results.len());
-println!("Mixed: {} and {}", add_result, multiply_result);
-```
-
-### Performance Optimization: Pre-converted Tasks
-
-For hot paths where you submit the same tasks repeatedly, you can pre-convert tasks to avoid repeated pointer conversions:
-
-```rust
-let pool = ZeroPool::new();
-let mut results = vec![0u64; 100];
-
-let tasks: Vec<_> = results.iter_mut().map(|result| {
-    ComputeParams { work_amount: 1000, result }
-}).collect();
-
-// Convert once, reuse multiple times
-let tasks_converted = uniform_tasks_to_pointers(compute_task, &tasks);
-
-// Submit multiple batches with zero conversion overhead
-let futures: Vec<_> = (0..3).map(|_| {
-    pool.submit_raw_task_batch(&tasks_converted)
-}).collect();
-
-// Submit multiple batches with zero conversion overhead
-for _ in 0..3 {
-    let future = pool.submit_raw_task_batch(&tasks_converted);
-    future.wait();
-}
 ```
