@@ -18,20 +18,18 @@
 //! ## Example
 //!
 //! ```rust
-//! use zero_pool::{ZeroPool, zp_task_params, zp_define_task_fn, zp_write};
+//! use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
 //!
-//! zp_task_params! {
-//!     MyTask { value: u64, result: *mut u64 }
-//! }
+//! struct MyTaskStruct { value: u64, result: *mut u64 }
 //!
-//! zp_define_task_fn!(my_task, MyTask, |params| {
+//! zp_define_task_fn!(my_task, MyTaskStruct, |params| {
 //!     zp_write!(params.result, params.value * 2);
 //! });
 //!
 //! let pool = ZeroPool::new();
 //! let mut result = 0u64;
-//! let task = MyTask::new(42, &mut result);
-//! pool.submit_task(my_task, &task).wait();
+//! let my_task_struct = MyTaskStruct { value: 42, result: &mut result };
+//! pool.submit_task(my_task, &my_task_struct).wait();
 //! assert_eq!(result, 84);
 //! ```
 
@@ -74,21 +72,19 @@ pub type TaskItem = (TaskFnPointer, TaskParamPointer);
 /// # Examples
 ///
 /// ```rust
-/// use zero_pool::{ZeroPool, uniform_tasks_to_pointers, zp_task_params, zp_define_task_fn, zp_write};
+/// use zero_pool::{ZeroPool, uniform_tasks_to_pointers, zp_define_task_fn, zp_write};
 ///
-/// zp_task_params! {
-///     MyTask { value: u64, result: *mut u64 }
-/// }
+/// struct MyTaskStruct { value: u64, result: *mut u64 }
 ///
-/// zp_define_task_fn!(my_task_fn, MyTask, |params| {
+/// zp_define_task_fn!(my_task_fn, MyTaskStruct, |params| {
 ///     zp_write!(params.result, params.value * 2);
 /// });
 ///
 /// let pool = ZeroPool::new();
 /// let mut results = [0u64; 2];
 /// let tasks = [
-///     MyTask::new(1, &mut results[0]),
-///     MyTask::new(2, &mut results[1])
+///     MyTaskStruct { value: 1, result: &mut results[0] },
+///     MyTaskStruct { value: 2, result: &mut results[1] }
 /// ];
 ///
 /// // Convert once, reuse multiple times

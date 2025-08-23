@@ -5,7 +5,7 @@ use std::hint::black_box;
 use test::Bencher;
 
 use rayon::prelude::*;
-use zero_pool::{ZeroPool, zp_define_task_fn, zp_task_params, zp_write_indexed};
+use zero_pool::{ZeroPool, zp_define_task_fn, zp_write_indexed};
 
 const TASK_COUNT: usize = 1000;
 const WORK_PER_TASK: usize = 100;
@@ -14,12 +14,10 @@ const HEAVY_MIN_WORK: usize = 10000;
 const HEAVY_MAX_WORK: usize = 50000;
 
 // task parameters: work amount, index to write to, and results vector
-zp_task_params! {
-    ComputeTask {
-        work_size: usize,
-        index: usize,
-        results: *mut Vec<u64>,
-    }
+struct ComputeTask {
+    work_size: usize,
+    index: usize,
+    results: *mut Vec<u64>,
 }
 
 // task function that does some computation and writes result to an index
@@ -34,11 +32,9 @@ zp_define_task_fn!(compute_task_fn, ComputeTask, |params| {
     zp_write_indexed!(params.results, params.index, sum);
 });
 
-zp_task_params! {
-    EmptyTask {
-        index: usize,
-        results: *mut Vec<u64>,
-    }
+struct EmptyTask {
+    index: usize,
+    results: *mut Vec<u64>,
 }
 
 zp_define_task_fn!(empty_task_fn, EmptyTask, |params| {
@@ -57,7 +53,11 @@ fn bench_indexed_computation_zeropool(b: &mut Bencher) {
         // create all task structs, each with its target index
         let mut tasks = Vec::with_capacity(TASK_COUNT);
         for i in 0..TASK_COUNT {
-            tasks.push(ComputeTask::new(WORK_PER_TASK, i, &mut results));
+            tasks.push(ComputeTask {
+                work_size: WORK_PER_TASK,
+                index: i,
+                results: &mut results,
+            });
         }
 
         // submit uniform batch and wait for completion
@@ -102,7 +102,10 @@ fn bench_task_overhead_zeropool(b: &mut Bencher) {
 
         let mut tasks = Vec::with_capacity(TASK_COUNT);
         for i in 0..TASK_COUNT {
-            tasks.push(EmptyTask::new(i, &mut results));
+            tasks.push(EmptyTask {
+                index: i,
+                results: &mut results,
+            });
         }
 
         let batch = pool.submit_batch_uniform(empty_task_fn, &tasks);
@@ -133,7 +136,11 @@ fn bench_indexed_computation_zeropool_optimised(b: &mut Bencher) {
     let mut results = vec![0u64; TASK_COUNT];
     let mut tasks = Vec::with_capacity(TASK_COUNT);
     for i in 0..TASK_COUNT {
-        tasks.push(ComputeTask::new(WORK_PER_TASK, i, &mut results));
+        tasks.push(ComputeTask {
+            work_size: WORK_PER_TASK,
+            index: i,
+            results: &mut results,
+        });
     }
 
     let tasks_converted = zero_pool::uniform_tasks_to_pointers(compute_task_fn, &tasks);
@@ -172,7 +179,10 @@ fn bench_task_overhead_zeropool_optimised(b: &mut Bencher) {
     let mut results = vec![0u64; TASK_COUNT];
     let mut tasks = Vec::with_capacity(TASK_COUNT);
     for i in 0..TASK_COUNT {
-        tasks.push(EmptyTask::new(i, &mut results));
+        tasks.push(EmptyTask {
+            index: i,
+            results: &mut results,
+        });
     }
 
     let tasks_converted = zero_pool::uniform_tasks_to_pointers(empty_task_fn, &tasks);
@@ -200,13 +210,10 @@ fn bench_task_overhead_rayon_optimised(b: &mut Bencher) {
 // ----------------------------
 
 // task parameters for heavy compute
-zp_task_params! {
-    HeavyComputeTask {
-        work_size: usize,
-        seed: u64,
-        index: usize,
-        results: *mut Vec<u64>,
-    }
+struct HeavyComputeTask {
+    seed: u64,
+    index: usize,
+    results: *mut Vec<u64>,
 }
 
 // Heavy compute task function with variable work based on seed
@@ -253,7 +260,11 @@ fn bench_heavy_compute_zeropool(b: &mut Bencher) {
 
         let mut tasks = Vec::with_capacity(TASK_COUNT);
         for i in 0..TASK_COUNT {
-            tasks.push(HeavyComputeTask::new(0, seeds[i], i, &mut results));
+            tasks.push(HeavyComputeTask {
+                seed: seeds[i],
+                index: i,
+                results: &mut results,
+            });
         }
 
         let batch = pool.submit_batch_uniform(heavy_compute_task_fn, &tasks);
@@ -326,7 +337,11 @@ fn bench_heavy_compute_zeropool_optimised(b: &mut Bencher) {
     let mut results = vec![0u64; TASK_COUNT];
     let mut tasks = Vec::with_capacity(TASK_COUNT);
     for i in 0..TASK_COUNT {
-        tasks.push(HeavyComputeTask::new(0, seeds[i], i, &mut results));
+        tasks.push(HeavyComputeTask {
+            seed: seeds[i],
+            index: i,
+            results: &mut results,
+        });
     }
 
     let tasks_converted = zero_pool::uniform_tasks_to_pointers(heavy_compute_task_fn, &tasks);
