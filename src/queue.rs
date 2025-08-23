@@ -88,7 +88,8 @@ impl Queue {
     pub fn has_tasks(&self) -> bool {
         let mut current = self.head.load(Ordering::Acquire);
 
-        while !current.is_null() {
+        loop {
+            // safe as head is never null due to anchor node
             let batch = unsafe { &*current };
 
             if batch.has_tasks() {
@@ -96,9 +97,10 @@ impl Queue {
             }
 
             current = batch.next.load(Ordering::Acquire);
+            if current.is_null() {
+                return false;
+            }
         }
-
-        false
     }
 
     pub fn shutdown(&self) {
