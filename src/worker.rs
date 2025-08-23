@@ -17,7 +17,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
                     break;
                 }
 
-                while let Some((work_item, batch_future)) = queue.claim_work() {
+                while let Some((task_item, batch_future)) = queue.claim_task() {
                     let batch_ptr = batch_future as *const TaskFuture;
 
                     // check if same batch
@@ -31,11 +31,11 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
                     }
 
                     // execute task
-                    (work_item.0)(work_item.1);
+                    (task_item.0)(task_item.1);
                     current_batch_count += 1;
                 }
 
-                // flush any remaining completions when no more work
+                // flush any remaining completions when no more tasks
                 if current_batch_count > 0 {
                     unsafe { (*current_batch_ptr).complete_many(current_batch_count) };
                     // no reset needed as inner loop handles batch switches

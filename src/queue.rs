@@ -17,11 +17,11 @@ pub struct Queue {
 
 impl Queue {
     pub fn new() -> Self {
-        let dummy = Box::into_raw(Box::new(TaskBatch::new(Vec::new(), TaskFuture::new(0))));
+        let anchor_node = Box::into_raw(Box::new(TaskBatch::new(Vec::new(), TaskFuture::new(0))));
 
         Queue {
-            head: PaddedAtomicPtr::new(dummy),
-            tail: PaddedAtomicPtr::new(dummy),
+            head: PaddedAtomicPtr::new(anchor_node),
+            tail: PaddedAtomicPtr::new(anchor_node),
             shutdown: AtomicBool::new(false),
             condvar_mutex: Mutex::new(()),
             condvar: Condvar::new(),
@@ -42,7 +42,7 @@ impl Queue {
         self.condvar.notify_all();
     }
 
-    pub fn claim_work(&self) -> Option<(TaskItem, &TaskFuture)> {
+    pub fn claim_task(&self) -> Option<(TaskItem, &TaskFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
@@ -73,7 +73,7 @@ impl Queue {
         let mut guard = self.condvar_mutex.lock().unwrap();
 
         loop {
-            if self.has_work() {
+            if self.has_tasks() {
                 return false;
             }
 
@@ -85,13 +85,13 @@ impl Queue {
         }
     }
 
-    pub fn has_work(&self) -> bool {
+    pub fn has_tasks(&self) -> bool {
         let mut current = self.head.load(Ordering::Acquire);
 
         while !current.is_null() {
             let batch = unsafe { &*current };
 
-            if batch.has_work() {
+            if batch.has_tasks() {
                 return true;
             }
 
