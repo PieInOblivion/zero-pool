@@ -57,11 +57,11 @@ impl Queue {
                 return None;
             }
 
-            // try to advance head, helps other threads skip empty batches
+            // try to advance head, helps other threads skip this empty batche
             let _ = self.head.compare_exchange_weak(
                 current,
                 next,
-                Ordering::Relaxed,
+                Ordering::Release,
                 Ordering::Relaxed,
             );
             current = next;
