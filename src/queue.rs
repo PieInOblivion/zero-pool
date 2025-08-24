@@ -31,6 +31,8 @@ impl Queue {
     pub fn push_batch(&self, items: Vec<TaskItem>, future: TaskFuture) {
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(items, future)));
 
+        let _guard = self.condvar_mutex.lock().unwrap();
+
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
 
         unsafe {
@@ -102,8 +104,7 @@ impl Queue {
 
     pub fn has_tasks(&self) -> bool {
         let tail = self.tail.load(Ordering::Acquire);
-        let tail_batch = unsafe { &*tail };
-        tail_batch.has_unclaimed_tasks()
+        unsafe { (&*tail).has_unclaimed_tasks() }
     }
 
     pub fn shutdown(&self) {
