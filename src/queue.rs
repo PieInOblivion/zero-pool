@@ -92,7 +92,7 @@ impl Queue {
             // safe as head is never null due to anchor node
             let batch = unsafe { &*current };
 
-            if batch.has_tasks() {
+            if batch.all_tasks_claimed() {
                 return true;
             }
 

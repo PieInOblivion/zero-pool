@@ -24,7 +24,7 @@ impl TaskBatch {
         self.items.get(item_index).copied()
     }
 
-    pub fn has_tasks(&self) -> bool {
+    pub fn all_tasks_claimed(&self) -> bool {
         self.next_item.load(Ordering::Relaxed) < self.items.len()
     }
 }
