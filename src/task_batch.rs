@@ -24,7 +24,7 @@ impl TaskBatch {
         self.items.get(item_index).copied()
     }
 
-    pub fn all_tasks_claimed(&self) -> bool {
+    pub fn has_unclaimed_tasks(&self) -> bool {
         self.next_item.load(Ordering::Relaxed) < self.items.len()
     }
 }
