@@ -1,9 +1,9 @@
 use crate::padded_type::PaddedAtomicPtr;
 use crate::task_batch::TaskBatch;
+use crate::wait_gate::WaitGate;
 use crate::{TaskFnPointer, task_future::TaskFuture};
 use crate::{TaskItem, TaskParamPointer};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Condvar, Mutex};
 
 pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
@@ -11,8 +11,7 @@ pub struct Queue {
 
     shutdown: AtomicBool,
 
-    condvar_mutex: Mutex<()>,
-    condvar: Condvar,
+    gate: WaitGate,
 }
 
 impl Queue {
@@ -23,25 +22,21 @@ impl Queue {
             head: PaddedAtomicPtr::new(anchor_node),
             tail: PaddedAtomicPtr::new(anchor_node),
             shutdown: AtomicBool::new(false),
-            condvar_mutex: Mutex::new(()),
-            condvar: Condvar::new(),
+            gate: WaitGate::new(),
         }
     }
 
     pub fn push_batch(&self, items: Vec<TaskItem>, future: TaskFuture) {
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(items, future)));
 
-        let _guard = self.condvar_mutex.lock().unwrap();
-
+        // Lock-free link (two atomics)
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
-
         unsafe {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
 
-        // NOTE: Notify all and having one empty spin per worker
-        // proved to have better performance than waking x workers for x tasks
-        self.condvar.notify_all();
+        // Only notify if sleepers
+        self.gate.notify_all_if_waiters();
     }
 
     pub fn claim_task(&self) -> Option<(TaskItem, &TaskFuture)> {
@@ -71,24 +66,9 @@ impl Queue {
     }
 
     // bool returns if shutdown has been set
-    pub fn wait_for_signal(&self) -> bool {
-        if self.has_tasks() {
-            return false;
-        }
-        if self.shutdown.load(Ordering::Relaxed) {
-            return true;
-        }
-
-        let mut guard = self.condvar_mutex.lock().unwrap();
-        loop {
-            if self.has_tasks() {
-                return false;
-            }
-            if self.shutdown.load(Ordering::Relaxed) {
-                return true;
-            }
-            guard = self.condvar.wait(guard).unwrap();
-        }
+    pub fn wait_for_signal(&self) {
+        self.gate
+            .wait_until(|| self.has_tasks() || self.shutdown.load(Ordering::Relaxed));
     }
 
     pub fn has_tasks(&self) -> bool {
@@ -96,11 +76,13 @@ impl Queue {
         unsafe { (&*tail).has_unclaimed_tasks() }
     }
 
+    pub fn is_shutdown(&self) -> bool {
+        self.shutdown.load(Ordering::Relaxed)
+    }
+
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Relaxed);
-
-        let _guard = self.condvar_mutex.lock().unwrap();
-        self.condvar.notify_all();
+        self.gate.notify_all();
     }
 
     pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> TaskFuture {
