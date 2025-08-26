@@ -79,15 +79,26 @@ impl Queue {
             return true;
         }
 
+        let mut snapshot_tail = self.tail.load(Ordering::Acquire);
         let mut guard = self.condvar_mutex.lock().unwrap();
+
         loop {
+            while !self.shutdown.load(Ordering::Relaxed)
+                && !self.has_tasks()
+                && self.tail.load(Ordering::Acquire) == snapshot_tail
+            {
+                guard = self.condvar.wait(guard).unwrap();
+            }
+
             if self.has_tasks() {
                 return false;
             }
             if self.shutdown.load(Ordering::Relaxed) {
                 return true;
             }
-            guard = self.condvar.wait(guard).unwrap();
+
+            // tail changed but still no visible tasks. rare transient, next pointer not yet seen
+            snapshot_tail = self.tail.load(Ordering::Acquire);
         }
     }
 
@@ -97,7 +108,7 @@ impl Queue {
     }
 
     pub fn shutdown(&self) {
-        self.shutdown.store(true, Ordering::Relaxed);
+        self.shutdown.store(true, Ordering::Release);
 
         let _guard = self.condvar_mutex.lock().unwrap();
         self.condvar.notify_all();
