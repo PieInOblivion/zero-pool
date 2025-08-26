@@ -10,14 +10,12 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
         .name(format!("zp{}", id))
         .spawn(move || {
             loop {
-                while let Some((batch_ptr, first_item, future)) = queue.get_next_batch() {
+                while let Some((batch, first_item, future)) = queue.get_next_batch() {
                     // process first claimed item
                     (first_item.0)(first_item.1);
                     let mut completed = 1;
 
-                    let batch_ref = unsafe { &*batch_ptr };
-
-                    while let Some(item) = batch_ref.claim_next_item() {
+                    while let Some(item) = batch.claim_next_item() {
                         (item.0)(item.1);
                         completed += 1;
                     }
