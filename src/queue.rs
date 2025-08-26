@@ -1,18 +1,15 @@
 use crate::padded_type::PaddedAtomicPtr;
 use crate::task_batch::TaskBatch;
+use crate::waiter::Waiter;
 use crate::{TaskFnPointer, task_future::TaskFuture};
 use crate::{TaskItem, TaskParamPointer};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Condvar, Mutex};
 
 pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
     tail: PaddedAtomicPtr<TaskBatch>,
-
+    waiter: Waiter,
     shutdown: AtomicBool,
-
-    condvar_mutex: Mutex<()>,
-    condvar: Condvar,
 }
 
 impl Queue {
@@ -23,9 +20,8 @@ impl Queue {
         Queue {
             head: PaddedAtomicPtr::new(anchor_node),
             tail: PaddedAtomicPtr::new(anchor_node),
+            waiter: Waiter::new(),
             shutdown: AtomicBool::new(false),
-            condvar_mutex: Mutex::new(()),
-            condvar: Condvar::new(),
         }
     }
 
@@ -38,11 +34,7 @@ impl Queue {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
 
-        let _guard = self.condvar_mutex.lock().unwrap();
-
-        // NOTE: Notify all and having one empty spin per worker
-        // proved to have better performance than waking x workers for x tasks
-        self.condvar.notify_all();
+        self.waiter.notify_work();
     }
 
     pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskItem, &TaskFuture)> {
@@ -73,19 +65,7 @@ impl Queue {
 
     // bool returns if shutdown has been set
     pub fn wait_for_signal(&self) -> bool {
-        let mut guard = self.condvar_mutex.lock().unwrap();
-
-        loop {
-            if self.shutdown.load(Ordering::Relaxed) {
-                return true;
-            }
-
-            if self.has_tasks() {
-                return false;
-            }
-
-            guard = self.condvar.wait(guard).unwrap();
-        }
+        self.waiter.wait_for(|| self.has_tasks(), &self.shutdown)
     }
 
     pub fn has_tasks(&self) -> bool {
@@ -95,9 +75,7 @@ impl Queue {
 
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Relaxed);
-
-        let _guard = self.condvar_mutex.lock().unwrap();
-        self.condvar.notify_all();
+        self.waiter.notify_shutdown();
     }
 
     pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> TaskFuture {
