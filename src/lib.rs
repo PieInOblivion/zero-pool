@@ -39,6 +39,7 @@ mod pool;
 mod queue;
 mod task_batch;
 mod task_future;
+mod wait;
 mod worker;
 
 pub use pool::ZeroPool;
