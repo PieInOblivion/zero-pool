@@ -35,14 +35,14 @@ impl Queue {
         self.notifier.fast_notify();
     }
 
-    pub fn claim_task(&self) -> Option<(TaskItem, &TaskFuture)> {
+    pub fn get_next_batch(&self) -> Option<(*mut TaskBatch, TaskItem, &TaskFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
             let batch = unsafe { &*current };
 
-            if let Some(work_item) = batch.claim_next_item() {
-                return Some((work_item, &batch.future));
+            if let Some(task) = batch.claim_next_item() {
+                return Some((current, task, &batch.future));
             }
 
             let next = batch.next.load(Ordering::Acquire);
@@ -50,7 +50,7 @@ impl Queue {
                 return None;
             }
 
-            // try to advance head, helps other threads skip this empty batch
+            // help advance head past empty batch
             let _ = self.head.compare_exchange_weak(
                 current,
                 next,
