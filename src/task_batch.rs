@@ -4,13 +4,13 @@ use crate::{TaskItem, padded_type::PaddedAtomicUsize, task_future::TaskFuture};
 
 pub struct TaskBatch {
     next_item: PaddedAtomicUsize,
-    items: Vec<TaskItem>,
+    items: Box<[TaskItem]>,
     pub future: TaskFuture,
     pub next: AtomicPtr<TaskBatch>,
 }
 
 impl TaskBatch {
-    pub fn new(items: Vec<TaskItem>, future: TaskFuture) -> Self {
+    pub fn new(items: Box<[TaskItem]>, future: TaskFuture) -> Self {
         TaskBatch {
             next_item: PaddedAtomicUsize::new(0),
             items,

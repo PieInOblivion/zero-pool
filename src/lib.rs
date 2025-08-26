@@ -95,8 +95,7 @@ pub type TaskItem = (TaskFnPointer, TaskParamPointer);
 ///     future.wait();
 /// }
 /// ```
-#[inline]
-pub fn uniform_tasks_to_pointers<T>(task_fn: TaskFnPointer, params_vec: &[T]) -> Vec<TaskItem> {
+pub fn uniform_tasks_to_pointers<T>(task_fn: TaskFnPointer, params_vec: &[T]) -> Box<[TaskItem]> {
     params_vec
         .iter()
         .map(|params| (task_fn, params as *const T as TaskParamPointer))

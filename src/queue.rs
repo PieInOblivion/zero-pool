@@ -17,7 +17,8 @@ pub struct Queue {
 
 impl Queue {
     pub fn new() -> Self {
-        let anchor_node = Box::into_raw(Box::new(TaskBatch::new(Vec::new(), TaskFuture::new(0))));
+        let anchor_node =
+            Box::into_raw(Box::new(TaskBatch::new(Box::from([]), TaskFuture::new(0))));
 
         Queue {
             head: PaddedAtomicPtr::new(anchor_node),
@@ -28,7 +29,7 @@ impl Queue {
         }
     }
 
-    pub fn push_batch(&self, items: Vec<TaskItem>, future: TaskFuture) {
+    pub fn push_batch(&self, items: Box<[TaskItem]>, future: TaskFuture) {
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(items, future)));
 
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
@@ -59,7 +60,7 @@ impl Queue {
                 return None;
             }
 
-            // try to advance head, helps other threads skip this empty batche
+            // try to advance head, helps other threads skip this empty batch
             let _ = self.head.compare_exchange_weak(
                 current,
                 next,
@@ -75,12 +76,12 @@ impl Queue {
         let mut guard = self.condvar_mutex.lock().unwrap();
 
         loop {
-            if self.has_tasks() {
-                return false;
-            }
-
             if self.shutdown.load(Ordering::Relaxed) {
                 return true;
+            }
+
+            if self.has_tasks() {
+                return false;
             }
 
             guard = self.condvar.wait(guard).unwrap();
@@ -101,7 +102,7 @@ impl Queue {
 
     pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> TaskFuture {
         let future = TaskFuture::new(1);
-        self.push_batch(vec![(task_fn, params)], future.clone());
+        self.push_batch(Box::from([(task_fn, params)]), future.clone());
         future
     }
 
@@ -112,7 +113,7 @@ impl Queue {
 
         let future = TaskFuture::new(tasks.len());
 
-        self.push_batch(tasks.to_owned(), future.clone());
+        self.push_batch(Box::from(tasks), future.clone());
         future
     }
 }

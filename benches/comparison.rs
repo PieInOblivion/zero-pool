@@ -139,7 +139,6 @@ fn bench_task_overhead_rayon(b: &mut Bencher) {
     });
 }
 
-
 struct HeavyComputeTask {
     seed: u64,
     index: usize,
