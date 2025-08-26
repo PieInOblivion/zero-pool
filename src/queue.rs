@@ -70,40 +70,37 @@ impl Queue {
 
     // bool returns if shutdown has been set
     pub fn wait_for_signal(&self) -> bool {
-        if self.has_tasks() {
-            return false;
-        }
-        if self.shutdown.load(Ordering::Relaxed) {
-            return true;
-        }
-
-        let mut snapshot_tail = self.tail.load(Ordering::Acquire);
         let mut guard = self.condvar_mutex.lock().unwrap();
 
         loop {
-            while !self.shutdown.load(Ordering::Relaxed)
-                && !self.has_tasks()
-                && self.tail.load(Ordering::Acquire) == snapshot_tail
-            {
-                guard = self.condvar.wait(guard).unwrap();
-            }
-
             if self.has_tasks() {
                 return false;
             }
+
             if self.shutdown.load(Ordering::Relaxed) {
                 return true;
             }
 
-            // tail changed but still no visible tasks. rare transient, next pointer not yet seen
-            snapshot_tail = self.tail.load(Ordering::Acquire);
+            guard = self.condvar.wait(guard).unwrap();
         }
     }
 
     pub fn has_tasks(&self) -> bool {
-        let tail = self.tail.load(Ordering::Acquire);
-        let tail_batch = unsafe { &*tail };
-        tail_batch.has_unclaimed_tasks()
+        let mut current = self.head.load(Ordering::Acquire);
+
+        loop {
+            // safe as head is never null due to anchor node
+            let batch = unsafe { &*current };
+
+            if batch.has_unclaimed_tasks() {
+                return true;
+            }
+
+            current = batch.next.load(Ordering::Acquire);
+            if current.is_null() {
+                return false;
+            }
+        }
     }
 
     pub fn shutdown(&self) {
