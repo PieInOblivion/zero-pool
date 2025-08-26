@@ -37,6 +37,8 @@ impl Queue {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
 
+        let _guard = self.condvar_mutex.lock().unwrap();
+
         // NOTE: Notify all and having one empty spin per worker
         // proved to have better performance than waking x workers for x tasks
         self.condvar.notify_all();
@@ -86,25 +88,12 @@ impl Queue {
     }
 
     pub fn has_tasks(&self) -> bool {
-        let mut current = self.head.load(Ordering::Acquire);
-
-        loop {
-            // safe as head is never null due to anchor node
-            let batch = unsafe { &*current };
-
-            if batch.has_unclaimed_tasks() {
-                return true;
-            }
-
-            current = batch.next.load(Ordering::Acquire);
-            if current.is_null() {
-                return false;
-            }
-        }
+        let tail = self.tail.load(Ordering::Acquire);
+        unsafe { (&*tail).has_unclaimed_tasks() }
     }
 
     pub fn shutdown(&self) {
-        self.shutdown.store(true, Ordering::Release);
+        self.shutdown.store(true, Ordering::Relaxed);
 
         let _guard = self.condvar_mutex.lock().unwrap();
         self.condvar.notify_all();

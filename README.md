@@ -1,22 +1,25 @@
 # Zero-Pool: Consistent High-Performance Thread Pool
 *When microseconds matter and allocation is the enemy.*
 
-This is an experimental thread pool implementation focused on exploring lock-free MPMC queue techniques and zero-allocation task dispatch. Consider this a performance playground rather than a production-ready library.
+This is an experimental thread pool implementation focused on exploring lock-free FIFO MPMC queue techniques and zero-allocation task dispatch. Consider this a performance playground rather than a production-ready library.
 
 ## Key Features:
 
 - **16 bytes per task** - minimal memory footprint per work item
-- **Zero locks** - lock free queue
+- **Zero locks*** - lock-free queue
 - **Zero queue limit** - unbounded
+- **Zero channels** - no std/crossbeam channel overhead
 - **Zero virtual dispatch** - function pointer dispatch avoids vtable lookups
 - **Zero core spinning** - event based
 - **Zero result transport cost** - tasks write directly to caller-provided memory
-- **Zero per worker queues** - single global queue structure
-- **Zero external dependencies** - standard library and stable rust only
+- **Zero per worker queues** - single global queue structure = perfect workload balancing
+- **Zero external dependencies** - standard library only and stable rust
 
 Workers are only passed 16 bytes per work item, a function pointer and a struct pointer. Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
 
 Since the library uses raw pointers, you must ensure parameter structs remain valid until `TaskFuture::wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe methods like `submit_task` and `submit_batch_uniform` for convenient usage.
+
+**Lock-free refers to workers consuming the queue. Submissions take a very short mutex only to coordinate condition-variable wakeups (not for queue mutation).*
 
 ## Benchmarks
 ```rust
