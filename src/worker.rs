@@ -11,12 +11,13 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
         .spawn(move || {
             loop {
                 while let Some((batch, first_param, future)) = queue.get_next_batch() {
-                    // process first claimed param
-                    (batch.task_fn())(first_param);
+                    let task_fn = batch.task_fn();
                     let mut completed = 1;
-
+                    // process first claimed param
+                    task_fn(first_param);
+                    
                     while let Some(param) = batch.claim_next_param() {
-                        (batch.task_fn())(param);
+                        task_fn(param);
                         completed += 1;
                     }
 
