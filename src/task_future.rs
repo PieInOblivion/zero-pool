@@ -72,16 +72,7 @@ impl TaskFuture {
         }
         true
     }
-
-    /// Get the approximate number of remaining incomplete tasks
-    ///
-    /// This provides a way to monitor progress of task batches.
-    /// The count is approximate due to relaxed atomic ordering.
-    /// Not for precise synchronization.
-    pub fn remaining_count(&self) -> usize {
-        self.remaining.load(Ordering::Relaxed)
-    }
-
+    
     // completes multiple tasks, decrements counter and notifies if all done
     pub(crate) fn complete_many(&self, count: usize) {
         let remaining_count = self.remaining.fetch_sub(count, Ordering::Release);
