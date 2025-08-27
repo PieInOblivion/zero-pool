@@ -21,6 +21,7 @@
 #[macro_export]
 macro_rules! zp_define_task_fn {
     ($fn_name:ident, $param_type:ty, |$params:ident| $body:block) => {
+        #[inline(always)]
         fn $fn_name(raw_params: $crate::TaskParamPointer) {
             let $params = unsafe { &*(raw_params as *const $param_type) };
             $body
