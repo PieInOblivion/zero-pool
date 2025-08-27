@@ -73,7 +73,7 @@ pub type TaskItem = (TaskFnPointer, TaskParamPointer);
 /// # Examples
 ///
 /// ```rust
-/// use zero_pool::{ZeroPool, uniform_tasks_to_pointers, zp_define_task_fn, zp_write};
+/// use zero_pool::{ZeroPool, uniform_params_to_pointers, zp_define_task_fn, zp_write};
 ///
 /// struct MyTaskStruct { value: u64, result: *mut u64 }
 ///
@@ -89,16 +89,16 @@ pub type TaskItem = (TaskFnPointer, TaskParamPointer);
 /// ];
 ///
 /// // Convert once, reuse multiple times
-/// let work_items = uniform_tasks_to_pointers(my_task_fn, &tasks);
+/// let work_items = uniform_params_to_pointers(&tasks);
 ///
 /// for _ in 0..5 {
-///     let future = pool.submit_raw_task_batch(&work_items);
+///     let future = pool.submit_raw_task_batch(my_task_fn, &work_items);
 ///     future.wait();
 /// }
 /// ```
-pub fn uniform_tasks_to_pointers<T>(task_fn: TaskFnPointer, params_vec: &[T]) -> Box<[TaskItem]> {
+pub fn uniform_params_to_pointers<T>(params_vec: &[T]) -> Box<[TaskParamPointer]> {
     params_vec
         .iter()
-        .map(|params| (task_fn, params as *const T as TaskParamPointer))
+        .map(|params| params as *const T as TaskParamPointer)
         .collect()
 }

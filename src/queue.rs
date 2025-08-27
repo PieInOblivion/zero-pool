@@ -1,8 +1,8 @@
+use crate::TaskParamPointer;
 use crate::padded_type::PaddedAtomicPtr;
 use crate::task_batch::TaskBatch;
 use crate::waiter::Waiter;
 use crate::{TaskFnPointer, task_future::TaskFuture};
-use crate::{TaskItem, TaskParamPointer};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct Queue {
@@ -14,8 +14,12 @@ pub struct Queue {
 
 impl Queue {
     pub fn new() -> Self {
-        let anchor_node =
-            Box::into_raw(Box::new(TaskBatch::new(Box::from([]), TaskFuture::new(0))));
+        fn noop(_: *const ()) {}
+        let anchor_node = Box::into_raw(Box::new(TaskBatch::new(
+            noop,
+            Box::from([]),
+            TaskFuture::new(0),
+        )));
 
         Queue {
             head: PaddedAtomicPtr::new(anchor_node),
@@ -25,11 +29,15 @@ impl Queue {
         }
     }
 
-    pub fn push_batch(&self, items: Box<[TaskItem]>, future: TaskFuture) {
-        let new_batch = Box::into_raw(Box::new(TaskBatch::new(items, future)));
+    pub fn push_batch(
+        &self,
+        task_fn: TaskFnPointer,
+        params: Box<[TaskParamPointer]>,
+        future: TaskFuture,
+    ) {
+        let new_batch = Box::into_raw(Box::new(TaskBatch::new(task_fn, params, future)));
 
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
-
         unsafe {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
@@ -37,14 +45,14 @@ impl Queue {
         self.waiter.notify_work();
     }
 
-    pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskItem, &TaskFuture)> {
+    pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
             let batch = unsafe { &*current };
 
-            if let Some(task) = batch.claim_next_item() {
-                return Some((batch, task, &batch.future));
+            if let Some(param) = batch.claim_next_param() {
+                return Some((batch, param, &batch.future));
             }
 
             let next = batch.next.load(Ordering::Acquire);
@@ -80,18 +88,22 @@ impl Queue {
 
     pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> TaskFuture {
         let future = TaskFuture::new(1);
-        self.push_batch(Box::from([(task_fn, params)]), future.clone());
+        self.push_batch(task_fn, Box::from([params]), future.clone());
         future
     }
 
-    pub fn push_task_batch(&self, tasks: &[TaskItem]) -> TaskFuture {
-        if tasks.is_empty() {
+    pub fn push_task_batch(
+        &self,
+        task_fn: TaskFnPointer,
+        params: &[TaskParamPointer],
+    ) -> TaskFuture {
+        if params.is_empty() {
             return TaskFuture::new(0);
         }
 
-        let future = TaskFuture::new(tasks.len());
+        let future = TaskFuture::new(params.len());
 
-        self.push_batch(Box::from(tasks), future.clone());
+        self.push_batch(task_fn, Box::from(params), future.clone());
         future
     }
 }

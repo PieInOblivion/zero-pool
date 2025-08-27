@@ -2,26 +2,12 @@ use std::{
     hint::black_box,
     time::{Duration, Instant},
 };
-use zero_pool::{
-    TaskFnPointer, TaskParamPointer, ZeroPool, zp_define_task_fn, zp_submit_batch_mixed, zp_write,
-};
+use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
 
 // Define task parameter structures
 struct SimpleTask {
     iterations: usize,
     result: *mut u64,
-}
-struct PrimeTask {
-    number: u64,
-    result: *mut bool,
-}
-struct MatrixTask {
-    size: usize,
-    result: *mut f64,
-}
-struct SortTask {
-    size: usize,
-    data: *mut Vec<i32>,
 }
 struct ComplexTask {
     size: usize,
@@ -55,83 +41,16 @@ zp_define_task_fn!(complex_task_fn, ComplexTask, |params| {
     zp_write!(params.result, result);
 });
 
-zp_define_task_fn!(is_prime_task, PrimeTask, |params| {
-    let n = params.number;
-    let is_prime = if n < 2 {
-        false
-    } else if n == 2 {
-        true
-    } else if n % 2 == 0 {
-        false
-    } else {
-        let sqrt_n = (n as f64).sqrt() as u64;
-        let mut prime = true;
-        for i in (3..=sqrt_n).step_by(2) {
-            if n % i == 0 {
-                prime = false;
-                break;
-            }
-        }
-        prime
-    };
-    zp_write!(params.result, is_prime);
-});
-
-zp_define_task_fn!(matrix_multiply_task, MatrixTask, |params| {
-    let size = params.size;
-    let mut a = vec![vec![1.0f64; size]; size];
-    let mut b = vec![vec![2.0f64; size]; size];
-    let mut c = vec![vec![0.0f64; size]; size];
-
-    for i in 0..size {
-        for j in 0..size {
-            a[i][j] = (i * j + 1) as f64;
-            b[i][j] = (i + j + 1) as f64;
-        }
-    }
-
-    for i in 0..size {
-        for j in 0..size {
-            for k in 0..size {
-                c[i][j] += a[i][k] * b[k][j];
-            }
-        }
-    }
-
-    let mut diagonal_sum = 0.0;
-    for i in 0..size {
-        diagonal_sum += c[i][i];
-    }
-    zp_write!(params.result, diagonal_sum);
-});
-
-zp_define_task_fn!(sort_data_task, SortTask, |params| {
-    let data = unsafe { &mut *params.data };
-    data.clear();
-    for i in 0..params.size {
-        data.push(((i * 17 + 23) % 1000) as i32);
-    }
-
-    let len = data.len();
-    for i in 0..len {
-        for j in 0..len - 1 - i {
-            if data[j] > data[j + 1] {
-                data.swap(j, j + 1);
-            }
-        }
-    }
-});
-
 #[test]
 fn test_basic_functionality() {
     let pool = ZeroPool::new();
     let mut result = 0u64;
 
-    let task = SimpleTask {
+    let params = SimpleTask {
         iterations: 1000,
         result: &mut result,
     };
-    let future = pool.submit_task(simple_cpu_task, &task);
+    let future = pool.submit_task(simple_cpu_task, &params);
     future.wait();
 
     assert_ne!(result, 0);
@@ -167,61 +86,6 @@ fn test_massive_simple_tasks() {
 }
 
 #[test]
-fn test_mixed_workload() {
-    let pool = ZeroPool::new();
-
-    let mut simple_result = 0u64;
-    let simple_task = SimpleTask {
-        iterations: 50000,
-        result: &mut simple_result,
-    };
-
-    let mut prime_result = false;
-    let prime_task = PrimeTask {
-        number: 982451653,
-        result: &mut prime_result,
-    };
-
-    let mut matrix_result = 0.0f64;
-    let matrix_task = MatrixTask {
-        size: 80,
-        result: &mut matrix_result,
-    };
-
-    let mut sort_data = Vec::new();
-    let sort_task = SortTask {
-        size: 5000,
-        data: &mut sort_data,
-    };
-
-    println!("Running mixed workload...");
-    let start = Instant::now();
-
-    let batch = zp_submit_batch_mixed!(
-        pool,
-        [
-            (&simple_task, simple_cpu_task),
-            (&prime_task, is_prime_task),
-            (&matrix_task, matrix_multiply_task),
-            (&sort_task, sort_data_task),
-        ]
-    );
-
-    batch.wait();
-
-    let duration = start.elapsed();
-    println!("Mixed workload completed in {:?}", duration);
-
-    assert_ne!(simple_result, 0);
-    assert_ne!(matrix_result, 0.0);
-    assert!(!sort_data.is_empty());
-    println!("Simple task result: {}", simple_result);
-    println!("Prime check result: {}", prime_result);
-    println!("Matrix result: {}", matrix_result);
-    println!("Sort result length: {}", sort_data.len());
-}
-
-#[test]
 fn test_empty_batch_submission() {
     let pool = ZeroPool::new();
 
@@ -231,10 +95,6 @@ fn test_empty_batch_submission() {
     let empty_batch = pool.submit_batch_uniform(simple_cpu_task, &empty_tasks);
     assert!(empty_batch.is_complete());
     empty_batch.wait();
-
-    let empty_mixed = zp_submit_batch_mixed!(pool, []);
-    assert!(empty_mixed.is_complete());
-    empty_mixed.wait();
 
     println!("Empty batch tests completed successfully");
 }
@@ -338,11 +198,11 @@ fn test_shutdown_and_cleanup() {
     {
         let pool2 = ZeroPool::new();
         let mut test_result = 0u64;
-        let task = SimpleTask {
+        let params = SimpleTask {
             iterations: 100,
             result: &mut test_result,
         };
-        let future = pool2.submit_task(simple_cpu_task, &task);
+        let future = pool2.submit_task(simple_cpu_task, &params);
         future.wait();
         assert_ne!(test_result, 0);
         println!("New pool works correctly after previous cleanup");
@@ -357,12 +217,12 @@ fn test_rapid_pool_creation() {
 
         let pool = ZeroPool::new();
         let mut result = 0u64;
-        let task = SimpleTask {
+        let params = SimpleTask {
             iterations: 500,
             result: &mut result,
         };
 
-        let future = pool.submit_task(simple_cpu_task, &task);
+        let future = pool.submit_task(simple_cpu_task, &params);
         future.wait();
 
         assert_ne!(result, 0);
@@ -379,11 +239,11 @@ fn test_wait_timeout() {
 
     // Test that timeout works for quick tasks
     let mut result = 0u64;
-    let task = SimpleTask {
+    let params = SimpleTask {
         iterations: 100,
         result: &mut result,
     };
-    let future = pool.submit_task(simple_cpu_task, &task);
+    let future = pool.submit_task(simple_cpu_task, &params);
 
     let start = Instant::now();
     let completed = future.wait_timeout(Duration::from_secs(5));
@@ -518,10 +378,10 @@ fn test_optimized_uniform_batch() {
         })
         .collect();
 
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(simple_task_fn, &tasks);
+    let params_converted = zero_pool::uniform_params_to_pointers(&tasks);
 
     let start = Instant::now();
-    let batch = pool.submit_raw_task_batch(&tasks_converted);
+    let batch = pool.submit_raw_task_batch(simple_task_fn, &params_converted);
     batch.wait();
     let duration = start.elapsed();
 
@@ -551,7 +411,7 @@ fn test_optimized_api_equivalence() {
 
     // Test optimized API
     let mut optimized_results = vec![0u64; task_count];
-    let optimized_tasks: Vec<_> = optimized_results
+    let optimized_params: Vec<_> = optimized_results
         .iter_mut()
         .map(|result| SimpleTask {
             iterations: 123,
@@ -559,8 +419,8 @@ fn test_optimized_api_equivalence() {
         })
         .collect();
 
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(simple_task_fn, &optimized_tasks);
-    let optimized_batch = pool.submit_raw_task_batch(&tasks_converted);
+    let params_converted = zero_pool::uniform_params_to_pointers(&optimized_params);
+    let optimized_batch = pool.submit_raw_task_batch(simple_task_fn, &params_converted);
     optimized_batch.wait();
 
     // Verify results are identical
@@ -574,50 +434,13 @@ fn test_optimized_api_equivalence() {
 }
 
 #[test]
-fn test_optimized_mixed_batch() {
-    let pool = ZeroPool::new();
-
-    let mut simple_result = 0u64;
-    let simple_task = SimpleTask {
-        iterations: 50000,
-        result: &mut simple_result,
-    };
-
-    let mut prime_result = false;
-    let prime_task = PrimeTask {
-        number: 982451653,
-        result: &mut prime_result,
-    };
-
-    let mixed_tasks = vec![
-        (
-            simple_cpu_task as TaskFnPointer,
-            &simple_task as *const _ as TaskParamPointer,
-        ),
-        (
-            is_prime_task as TaskFnPointer,
-            &prime_task as *const _ as TaskParamPointer,
-        ),
-    ];
-
-    let batch = pool.submit_raw_task_batch(&mixed_tasks);
-    batch.wait();
-
-    assert_ne!(simple_result, 0);
-    println!(
-        "Optimized mixed batch - Simple: {}, Prime: {}",
-        simple_result, prime_result
-    );
-}
-
-#[test]
 fn test_optimized_reuse_pattern() {
     // Tests reusing converted task pointers across multiple submissions
     let pool = ZeroPool::new();
     let task_count = 100;
 
     let mut results = vec![0u64; task_count];
-    let tasks: Vec<_> = results
+    let params: Vec<_> = results
         .iter_mut()
         .map(|result| SimpleTask {
             iterations: 500,
@@ -625,14 +448,14 @@ fn test_optimized_reuse_pattern() {
         })
         .collect();
 
-    let tasks_converted = zero_pool::uniform_tasks_to_pointers(simple_task_fn, &tasks);
+    let params_converted = zero_pool::uniform_params_to_pointers(&params);
 
     for iteration in 0..5 {
         for result in results.iter_mut() {
             *result = 0;
         }
 
-        let batch = pool.submit_raw_task_batch(&tasks_converted);
+        let batch = pool.submit_raw_task_batch(simple_task_fn, &params_converted);
         batch.wait();
 
         let completed_count = results.iter().filter(|&&r| r != 0).count();
@@ -654,13 +477,13 @@ fn test_complex_workload_scaling() {
         let pool = ZeroPool::with_workers(workers);
         let mut results = vec![0.0; 20];
 
-        let tasks: Vec<_> = results
+        let params: Vec<_> = results
             .iter_mut()
             .map(|result| ComplexTask { size: 50, result })
             .collect();
 
         let start = Instant::now();
-        let batch = pool.submit_batch_uniform(complex_task_fn, &tasks);
+        let batch = pool.submit_batch_uniform(complex_task_fn, &params);
         batch.wait();
         let duration = start.elapsed();
 

@@ -1,6 +1,6 @@
 use crate::{
-    TaskFnPointer, TaskItem, TaskParamPointer, queue::Queue, task_future::TaskFuture,
-    uniform_tasks_to_pointers, worker::spawn_worker,
+    TaskFnPointer, TaskParamPointer, queue::Queue, task_future::TaskFuture,
+    uniform_params_to_pointers, worker::spawn_worker,
 };
 use std::{sync::Arc, thread::JoinHandle};
 
@@ -94,13 +94,12 @@ impl ZeroPool {
     /// Submit a batch of tasks using raw work items
     ///
     /// This method provides optimal performance for pre-converted task batches.
-    /// Use `uniform_tasks_to_pointers` to convert typed tasks efficiently,
-    /// or build work items manually for mixed task types.
+    /// Use `uniform_params_to_pointers` to convert typed tasks efficiently.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use zero_pool::{ZeroPool, uniform_tasks_to_pointers, zp_define_task_fn, zp_write};
+    /// use zero_pool::{ZeroPool, uniform_params_to_pointers, zp_define_task_fn, zp_write};
     ///
     /// struct MyTaskParams { value: u64, result: *mut u64 }
     ///
@@ -114,14 +113,18 @@ impl ZeroPool {
     ///     MyTaskParams { value: 1, result: &mut results[0] },
     ///     MyTaskParams { value: 2, result: &mut results[1] }
     /// ];
-    /// let tasks = uniform_tasks_to_pointers(my_task, &task_params);
-    /// let future = pool.submit_raw_task_batch(&tasks);
+    /// let params = uniform_params_to_pointers(&task_params);
+    /// let future = pool.submit_raw_task_batch(my_task, &params);
     /// future.wait();
     /// assert_eq!(results[0], 2);
     /// assert_eq!(results[1], 4);
     /// ```
-    pub fn submit_raw_task_batch(&self, tasks: &[TaskItem]) -> TaskFuture {
-        self.queue.push_task_batch(tasks)
+    pub fn submit_raw_task_batch(
+        &self,
+        task_fn: TaskFnPointer,
+        params: &[TaskParamPointer],
+    ) -> TaskFuture {
+        self.queue.push_task_batch(task_fn, params)
     }
 
     /// Submit a single typed task with automatic pointer conversion
@@ -182,8 +185,8 @@ impl ZeroPool {
     /// assert_eq!(results[999], 1998);
     /// ```
     pub fn submit_batch_uniform<T>(&self, task_fn: TaskFnPointer, params_vec: &[T]) -> TaskFuture {
-        let tasks = uniform_tasks_to_pointers(task_fn, params_vec);
-        self.submit_raw_task_batch(&tasks)
+        let tasks = uniform_params_to_pointers(params_vec);
+        self.submit_raw_task_batch(task_fn, &tasks)
     }
 }
 
