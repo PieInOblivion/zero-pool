@@ -5,7 +5,6 @@ This is an experimental thread pool implementation focused on exploring lock-fre
 
 ## Key Features:
 
-- **16 bytes per task** - minimal memory footprint per work item
 - **Zero locks*** - lock-free queue
 - **Zero queue limit** - unbounded
 - **Zero channels** - no std/crossbeam channel overhead
@@ -150,47 +149,6 @@ future2.wait();
 
 println!("Single: {}", single_result);
 println!("Batch completed: {} tasks", batch_results.len());
-```
-
-### Performance Optimisation: Pre-converted Tasks
-
-For hot paths where you submit the same tasks repeatedly, you can pre-convert tasks to avoid repeated pointer conversions:
-
-```rust
-use zero_pool::{ZeroPool, uniform_params_to_pointers, zp_define_task_fn, zp_write};
-
-struct ComputeParams {
-    work_amount: usize,
-    result: *mut u64,
-}
-
-zp_define_task_fn!(compute_task, ComputeParams, |params| {
-    let mut sum = 0u64;
-    for i in 0..params.work_amount {
-        sum += i as u64;
-    }
-    zp_write!(params.result, sum);
-});
-
-let pool = ZeroPool::new();
-let mut results = vec![0u64; 100];
-
-let task_params: Vec<_> = results.iter_mut().map(|result| {
-    ComputeParams { work_amount: 1000, result }
-}).collect();
-
-// Convert once, reuse multiple times
-let converted_tasks = uniform_params_to_pointers(&task_params);
-
-// Submit multiple batches with zero conversion overhead
-let futures: Vec<_> = (0..3).map(|_| {
-    pool.submit_raw_task_batch(compute_task, &converted_tasks)
-}).collect();
-
-// Then wait for all to complete
-for future in futures {
-    future.wait();
-}
 ```
 
 ### `zp_define_task_fn!`

@@ -15,9 +15,10 @@ pub struct Queue {
 impl Queue {
     pub fn new() -> Self {
         fn noop(_: *const ()) {}
+        let empty_slice: &[u8] = &[];
         let anchor_node = Box::into_raw(Box::new(TaskBatch::new(
             noop,
-            Box::from([]),
+            empty_slice,
             TaskFuture::new(0),
         )));
 
@@ -29,13 +30,13 @@ impl Queue {
         }
     }
 
-    pub fn push_batch(
-        &self,
-        task_fn: TaskFnPointer,
-        params: Box<[TaskParamPointer]>,
-        future: TaskFuture,
-    ) {
-        let new_batch = Box::into_raw(Box::new(TaskBatch::new(task_fn, params, future)));
+    pub fn push_task_batch<T>(&self, task_fn: TaskFnPointer, params: &[T]) -> TaskFuture {
+        if params.is_empty() {
+            return TaskFuture::new(0);
+        }
+
+        let future = TaskFuture::new(params.len());
+        let new_batch = Box::into_raw(Box::new(TaskBatch::new(task_fn, params, future.clone())));
 
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
         unsafe {
@@ -43,6 +44,7 @@ impl Queue {
         }
 
         self.waiter.notify();
+        future
     }
 
     pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
@@ -84,27 +86,6 @@ impl Queue {
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Relaxed);
         self.waiter.notify();
-    }
-
-    pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> TaskFuture {
-        let future = TaskFuture::new(1);
-        self.push_batch(task_fn, Box::from([params]), future.clone());
-        future
-    }
-
-    pub fn push_task_batch(
-        &self,
-        task_fn: TaskFnPointer,
-        params: &[TaskParamPointer],
-    ) -> TaskFuture {
-        if params.is_empty() {
-            return TaskFuture::new(0);
-        }
-
-        let future = TaskFuture::new(params.len());
-
-        self.push_batch(task_fn, Box::from(params), future.clone());
-        future
     }
 }
 
