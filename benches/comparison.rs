@@ -10,9 +10,6 @@ use zero_pool::{ZeroPool, zp_define_task_fn, zp_write_indexed};
 const TASK_COUNT: usize = 1000;
 const WORK_PER_TASK: usize = 100;
 
-const HEAVY_MIN_WORK: usize = 10000;
-const HEAVY_MAX_WORK: usize = 50000;
-
 const INDIVIDUAL_TASK_COUNT: usize = 100;
 
 // task parameters: work amount, index to write to, and results vector
@@ -147,10 +144,8 @@ struct HeavyComputeTask {
 
 // heavy compute task function with variable work based on seed
 zp_define_task_fn!(heavy_compute_task_fn, HeavyComputeTask, |params| {
-    // use seed to generate a pseudo-random work amount
-    let mut rng_state = params.seed;
-    rng_state = rng_state.wrapping_mul(1103515245).wrapping_add(12345);
-    let work_amount = HEAVY_MIN_WORK + (rng_state as usize % (HEAVY_MAX_WORK - HEAVY_MIN_WORK));
+    // use fixed work amount instead of variable
+    let work_amount = 30000;
 
     let mut sum = 0u64;
     let mut x = params.seed;
@@ -221,11 +216,8 @@ fn bench_heavy_compute_rayon(b: &mut Bencher) {
             seeds
                 .par_iter()
                 .map(|&seed| {
-                    // seed to generate a pseudo-random work amount
-                    let mut rng_state = seed;
-                    rng_state = rng_state.wrapping_mul(1103515245).wrapping_add(12345);
-                    let work_amount =
-                        HEAVY_MIN_WORK + (rng_state as usize % (HEAVY_MAX_WORK - HEAVY_MIN_WORK));
+                    // use fixed work amount instead of variable
+                    let work_amount = 30000; // consistent work per task
 
                     let mut sum = 0u64;
                     let mut x = seed;
