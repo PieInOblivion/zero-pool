@@ -42,7 +42,7 @@ impl Queue {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
 
-        self.waiter.notify_work();
+        self.waiter.notify();
     }
 
     pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
@@ -83,7 +83,7 @@ impl Queue {
 
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Relaxed);
-        self.waiter.notify_shutdown();
+        self.waiter.notify();
     }
 
     pub fn push_single_task(&self, task_fn: TaskFnPointer, params: TaskParamPointer) -> TaskFuture {
