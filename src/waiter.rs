@@ -15,6 +15,7 @@ impl Waiter {
     }
 
     pub fn notify(&self) {
+        let _guard = self.mutex.lock().unwrap();
         self.condvar.notify_all();
     }
 
