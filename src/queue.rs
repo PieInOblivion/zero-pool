@@ -83,7 +83,6 @@ impl Queue {
             .wait_for(|| self.has_tasks() || self.is_shutdown(), worker_id);
     }
 
-    /// Query whether shutdown has been requested.
     pub fn is_shutdown(&self) -> bool {
         self.shutdown.load(Ordering::Acquire)
     }
