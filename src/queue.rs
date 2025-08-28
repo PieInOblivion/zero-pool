@@ -77,10 +77,6 @@ impl Queue {
         self.waiter.register_current_thread(worker_id);
     }
 
-    pub fn registered_count(&self) -> usize {
-        self.waiter.registered_count()
-    }
-
     // bool returns if shutdown has been set
     pub fn wait_for_signal(&self, worker_id: usize) -> bool {
         self.waiter

@@ -5,12 +5,18 @@ use std::{
 
 use crate::queue::Queue;
 
-pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
+pub fn spawn_worker(
+    id: usize,
+    queue: Arc<Queue>,
+    barrier: Arc<std::sync::Barrier>,
+) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {
             // register this thread with the queue's waiter so it can be unparked by id
             queue.register_worker_thread(id);
+            // signal registration complete and wait for all workers + main
+            barrier.wait();
             loop {
                 while let Some((batch, first_param, future)) = queue.get_next_batch() {
                     let task_fn = batch.task_fn();

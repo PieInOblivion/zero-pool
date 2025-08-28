@@ -1,5 +1,5 @@
 use crate::{TaskFnPointer, queue::Queue, task_future::TaskFuture, worker::spawn_worker};
-use std::{sync::Arc, thread::JoinHandle};
+use std::{sync::Arc, sync::Barrier, thread::JoinHandle};
 
 pub struct ZeroPool {
     queue: Arc<Queue>,
@@ -45,14 +45,12 @@ impl ZeroPool {
 
         let queue = Arc::new(Queue::new(worker_count));
 
+        let barrier = Arc::new(Barrier::new(worker_count + 1));
         let workers: Vec<JoinHandle<()>> = (0..worker_count)
-            .map(|id| spawn_worker(id, queue.clone()))
+            .map(|id| spawn_worker(id, queue.clone(), barrier.clone()))
             .collect();
 
-        // wait for all workers to register their thread handles
-        while queue.registered_count() < worker_count {
-            std::thread::yield_now();
-        }
+        barrier.wait();
 
         ZeroPool { queue, workers }
     }

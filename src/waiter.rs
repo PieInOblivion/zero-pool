@@ -1,31 +1,35 @@
-use crate::padded_type::PaddedAtomicUsize;
+use crate::padded_type::PaddedAtomicPtr;
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
+use std::ptr;
+use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, Thread};
 
 pub struct Waiter {
-    registered: PaddedAtomicUsize,
-    top: PaddedAtomicUsize,
-    // treiber lifo stack: per-worker next pointers
-    stack_next: Box<[PaddedAtomicUsize]>,
+    // Michael-Scott queue using heap nodes: head/tail point to Node
+    head: PaddedAtomicPtr<Node>,
+    tail: PaddedAtomicPtr<Node>,
     // worker thread slots. each worker stores its handle here once at startup
     // ready is release/set by the worker. readers use acquire to see the stored handle
     worker_threads: Box<[ThreadSlot]>,
 }
 
-#[repr(align(64))]
 struct ThreadSlot {
-    ready: AtomicBool,
+    // store the thread handle in-place once at registration
     thread: UnsafeCell<MaybeUninit<Thread>>,
+}
+
+struct Node {
+    id: usize,
+    next: AtomicPtr<Node>,
 }
 
 unsafe impl Sync for ThreadSlot {}
 
 impl ThreadSlot {
-    const fn new() -> Self {
+    fn new() -> Self {
         ThreadSlot {
-            ready: AtomicBool::new(false),
             thread: UnsafeCell::new(MaybeUninit::uninit()),
         }
     }
@@ -34,11 +38,6 @@ impl ThreadSlot {
         unsafe {
             (*self.thread.get()).write(t);
         }
-        self.ready.store(true, Ordering::Release);
-    }
-
-    fn is_ready(&self) -> bool {
-        self.ready.load(Ordering::Acquire)
     }
 
     fn get_thread_ref(&self) -> &Thread {
@@ -46,12 +45,10 @@ impl ThreadSlot {
     }
 
     unsafe fn drop_if_init(&self) {
-        if self.ready.load(Ordering::Acquire) {
-            unsafe {
-                std::ptr::drop_in_place(
-                    self.thread.get() as *mut MaybeUninit<Thread> as *mut Thread
-                );
-            }
+        // Assume initialized (registration happens at worker spawn before
+        // pool creation returns). Drop the stored Thread.
+        unsafe {
+            std::ptr::drop_in_place(self.thread.get() as *mut MaybeUninit<Thread> as *mut Thread);
         }
     }
 }
@@ -68,112 +65,140 @@ impl Waiter {
             (0..worker_count).map(|_| ThreadSlot::new()).collect();
         let worker_threads = worker_threads_vec.into_boxed_slice();
 
-        let next_vec: Vec<PaddedAtomicUsize> = (0..worker_count)
-            .map(|_| PaddedAtomicUsize::new(usize::MAX))
-            .collect();
-        let stack_next = next_vec.into_boxed_slice();
+        // create sentinel node for M&S queue
+        let sentinel = Box::into_raw(Box::new(Node {
+            id: usize::MAX,
+            next: AtomicPtr::new(ptr::null_mut()),
+        }));
 
         Waiter {
-            registered: PaddedAtomicUsize::new(0),
-            top: PaddedAtomicUsize::new(usize::MAX),
-            stack_next,
+            head: PaddedAtomicPtr::new(sentinel),
+            tail: PaddedAtomicPtr::new(sentinel),
             worker_threads,
         }
     }
-
     /// register current thread into the per worker slot
     /// worker must call this once before parking
     pub fn register_current_thread(&self, worker_id: usize) {
         // store the thread handle into the preallocated slot
         self.worker_threads[worker_id].store_thread(thread::current());
-        self.registered.fetch_add(1, Ordering::AcqRel);
     }
 
-    pub fn registered_count(&self) -> usize {
-        self.registered.load(Ordering::Acquire)
-    }
-
-    /// push id onto the treiber stack. single atomic fast path
-    /// we write next[id] (relaxed) then CAS top -> id (acqrel). this ordering is
-    /// enough because the worker has already published its thread handle
     fn enqueue_id(&self, id: usize) -> bool {
+        // canonical M&S enqueue with heap node per enqueue
+        let node = Box::into_raw(Box::new(Node {
+            id,
+            next: AtomicPtr::new(ptr::null_mut()),
+        }));
         loop {
-            let head = self.top.load(Ordering::Acquire);
-            // set next[id] = head (relaxed; synchronization happens on the CAS)
-            self.stack_next[id].store(head, Ordering::Relaxed);
-            // try to swing top -> id; acqrel so later pop sees next pointer.
-            if self
-                .top
-                .compare_exchange_weak(head, id, Ordering::AcqRel, Ordering::Acquire)
-                .is_ok()
-            {
+            let tail = self.tail.load(Ordering::Acquire);
+            let tail_next = unsafe { (*tail).next.load(Ordering::Acquire) };
+            if !tail_next.is_null() {
+                // tail behind, try to advance
+                let _ = self.tail.compare_exchange_weak(
+                    tail,
+                    tail_next,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                );
+                continue;
+            }
+            // try to link node at tail.next
+            if unsafe {
+                (*tail)
+                    .next
+                    .compare_exchange_weak(
+                        ptr::null_mut(),
+                        node,
+                        Ordering::AcqRel,
+                        Ordering::Acquire,
+                    )
+                    .is_ok()
+            } {
+                // advance tail to new node (best-effort)
+                let _ = self.tail.compare_exchange_weak(
+                    tail,
+                    node,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                );
                 return true;
             }
             // CAS failed, retry
-            std::hint::spin_loop();
         }
     }
 
-    /// pop id from the treiber stack. returns None when empty.
-    /// on success the popped id's next pointer is visible due to acqrel CAS.
     fn dequeue_id(&self) -> Option<usize> {
         loop {
-            let head = self.top.load(Ordering::Acquire);
-            if head == usize::MAX {
+            let head = self.head.load(Ordering::Acquire);
+            let tail = self.tail.load(Ordering::Acquire);
+            let head_next = unsafe { (*head).next.load(Ordering::Acquire) };
+            if head_next.is_null() {
                 return None;
             }
-            // load next with acquire so we see any writes to next by the pusher.
-            let next = self.stack_next[head].load(Ordering::Acquire);
+            if head == tail {
+                // tail behind, try to advance
+                let _ = self.tail.compare_exchange_weak(
+                    tail,
+                    head_next,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                );
+                continue;
+            }
+            // try to advance head
             if self
-                .top
-                .compare_exchange(head, next, Ordering::AcqRel, Ordering::Acquire)
+                .head
+                .compare_exchange_weak(head, head_next, Ordering::AcqRel, Ordering::Acquire)
                 .is_ok()
             {
-                return Some(head);
+                // read id and free old head node
+                let id = unsafe { (*head_next).id };
+                // free old sentinel/head
+                unsafe {
+                    drop(Box::from_raw(head));
+                }
+                return Some(id);
             }
-            // CAS failed, retry
+            // otherwise retry
         }
     }
 
     /// Notify up to `count` waiters (bounded by number of workers). If `count` is larger than
     /// the worker capacity, it will notify as many as available.
     pub fn notify(&self, mut count: usize) {
+        // Special shutdown fast-path: if caller passed usize::MAX we should
+        // unpark all worker threads regardless of queue state. Do this before
+        // clamping `count` to avoid losing the sentinel value.
+        if count == usize::MAX {
+            for slot in self.worker_threads.iter() {
+                slot.get_thread_ref().unpark();
+            }
+            return;
+        }
+
         let cap = self.worker_threads.len();
         if count > cap {
             count = cap;
         }
 
         while count > 0 {
-            if let Some(id) = self.dequeue_id() {
-                if id == usize::MAX {
-                    continue;
-                }
-                let slot = &self.worker_threads[id];
-                if slot.is_ready() {
-                    // worker registered, safe to unpark
+            match self.dequeue_id() {
+                Some(id) => {
+                    if id == usize::MAX {
+                        continue;
+                    }
+                    let slot = &self.worker_threads[id];
+                    // If the worker stored a Thread handle, unpark it. We rely on
+                    // publish-then-enqueue ordering so a dequeued id implies the
+                    // thread handle is visible to us.
                     slot.get_thread_ref().unpark();
-                } else {
-                    // worker hasn't registered yet. try to push the id back a few times
-                    // so it can be observed later once the worker completes registration.
-                    let mut requeued = false;
-                    for _ in 0..3 {
-                        if self.enqueue_id(id) {
-                            requeued = true;
-                            break;
-                        }
-                        std::hint::spin_loop();
-                    }
-                    if !requeued {
-                        // skip this id for now
-                    }
+                    count -= 1;
                 }
-                count -= 1;
-            } else {
-                break;
+                None => break,
             }
         }
     }
-
     /// Worker parks itself after enqueuing its id.
     pub fn wait_for<P>(&self, predicate: P, shutdown: &AtomicBool, worker_id: usize) -> bool
     where
@@ -191,6 +216,11 @@ impl Waiter {
                 return false;
             }
 
+            // worker must have called `register_current_thread` earlier to
+            // publish its Thread. We no longer attempt lazy registration here.
+            // publish thread handle (assumed already stored at registration time)
+            // then push id and park. With correct ordering enqueue->dequeue
+            // synchronizes visibility of the stored Thread handle.
             if self.enqueue_id(worker_id) {
                 // park until unparked. park/unpark handles the case where unpark
                 // happens before park: park returns immediately if unparked earlier.
@@ -204,9 +234,6 @@ impl Waiter {
                 }
                 continue; // spurious wakeup or not yet ready, loop again
             }
-
-            // fallback (shouldn't happen with treiber stack): yield and retry
-            thread::yield_now();
         }
     }
 }
