@@ -43,11 +43,16 @@ impl ZeroPool {
     pub fn with_workers(worker_count: usize) -> Self {
         assert!(worker_count > 0, "Must have at least one worker");
 
-        let queue = Arc::new(Queue::new());
+        let queue = Arc::new(Queue::new(worker_count));
 
         let workers: Vec<JoinHandle<()>> = (0..worker_count)
             .map(|id| spawn_worker(id, queue.clone()))
             .collect();
+
+        // wait for all workers to register their thread handles
+        while queue.registered_count() < worker_count {
+            std::thread::yield_now();
+        }
 
         ZeroPool { queue, workers }
     }

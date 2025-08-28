@@ -5,7 +5,7 @@ This is an experimental thread pool implementation focused on exploring lock-fre
 
 ## Key Features:
 
-- **Zero locks*** - lock-free queue
+- **Zero locks** - completely lock-free
 - **Zero queue limit** - unbounded
 - **Zero channels** - no std/crossbeam channel overhead
 - **Zero virtual dispatch** - function pointer dispatch avoids vtable lookups
@@ -17,8 +17,6 @@ This is an experimental thread pool implementation focused on exploring lock-fre
 Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
 
 Since the library uses raw pointers, you must ensure parameter structs remain valid until `TaskFuture::wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe methods like `submit_task` and `submit_batch_uniform` for convenient usage.
-
-**Lock-free refers to workers consuming the queue. Submissions take a very short mutex only to coordinate condition-variable wakeups (not for queue mutation).*
 
 ## Benchmarks
 ```rust

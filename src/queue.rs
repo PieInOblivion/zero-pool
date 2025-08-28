@@ -4,6 +4,7 @@ use crate::task_batch::TaskBatch;
 use crate::waiter::Waiter;
 use crate::{TaskFnPointer, task_future::TaskFuture};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{Ordering as _Ordering, fence};
 
 pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
@@ -13,7 +14,7 @@ pub struct Queue {
 }
 
 impl Queue {
-    pub fn new() -> Self {
+    pub fn new(worker_count: usize) -> Self {
         fn noop(_: *const ()) {}
         let empty_slice: &[u8] = &[];
         let anchor_node = Box::into_raw(Box::new(TaskBatch::new(
@@ -25,7 +26,7 @@ impl Queue {
         Queue {
             head: PaddedAtomicPtr::new(anchor_node),
             tail: PaddedAtomicPtr::new(anchor_node),
-            waiter: Waiter::new(),
+            waiter: Waiter::new(worker_count),
             shutdown: AtomicBool::new(false),
         }
     }
@@ -43,7 +44,8 @@ impl Queue {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
 
-        self.waiter.notify();
+        fence(_Ordering::SeqCst);
+        self.waiter.notify(params.len());
         future
     }
 
@@ -73,9 +75,18 @@ impl Queue {
         }
     }
 
+    pub fn register_worker_thread(&self, worker_id: usize) {
+        self.waiter.register_current_thread(worker_id);
+    }
+
+    pub fn registered_count(&self) -> usize {
+        self.waiter.registered_count()
+    }
+
     // bool returns if shutdown has been set
-    pub fn wait_for_signal(&self) -> bool {
-        self.waiter.wait_for(|| self.has_tasks(), &self.shutdown)
+    pub fn wait_for_signal(&self, worker_id: usize) -> bool {
+        self.waiter
+            .wait_for(|| self.has_tasks(), &self.shutdown, worker_id)
     }
 
     pub fn has_tasks(&self) -> bool {
@@ -85,7 +96,8 @@ impl Queue {
 
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Relaxed);
-        self.waiter.notify();
+        fence(_Ordering::SeqCst);
+        self.waiter.notify(usize::MAX);
     }
 }
 
