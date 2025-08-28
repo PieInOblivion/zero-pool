@@ -1,7 +1,7 @@
 # Zero-Pool: Consistent High-Performance Thread Pool
 *When microseconds matter and allocation is the enemy.*
 
-This is an experimental thread pool implementation focused on exploring lock-free FIFO MPMC queue techniques and zero-allocation task dispatch. Consider this a performance playground rather than a production-ready library.
+This is an experimental thread pool implementation focused on exploring lock-free FIFO MPMC queue techniques. Consider this a performance playground rather than a production-ready library.
 
 ## Key Features:
 
@@ -18,21 +18,21 @@ Using a result-via-parameters pattern means workers place results into caller pr
 
 Since the library uses raw pointers, you must ensure parameter structs remain valid until `TaskFuture::wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe methods like `submit_task` and `submit_batch_uniform` for convenient usage.
 
+*Note: TaskFuture uses a small Mutex + Condvar to efficiently block waiting threads. Core pool operations remain lock-free.*
+
 ## Benchmarks
 ```rust
-test bench_heavy_compute_rayon                    ... bench:   4,844,119.25 ns/iter (+/- 626,564.62)
-test bench_heavy_compute_rayon_optimised          ... bench:   4,935,556.95 ns/iter (+/- 454,298.12)
-test bench_heavy_compute_zeropool                 ... bench:   4,390,880.40 ns/iter (+/- 347,767.12)
-test bench_heavy_compute_zeropool_optimised       ... bench:   4,407,382.45 ns/iter (+/- 336,057.06)
-test bench_indexed_computation_rayon              ... bench:      39,135.11 ns/iter (+/- 14,160.70)
-test bench_indexed_computation_rayon_optimised    ... bench:      34,639.97 ns/iter (+/- 7,624.86)
-test bench_indexed_computation_zeropool           ... bench:      50,064.12 ns/iter (+/- 4,719.97)
-test bench_indexed_computation_zeropool_optimised ... bench:      40,170.21 ns/iter (+/- 5,019.51)
-test bench_task_overhead_rayon                    ... bench:      39,940.40 ns/iter (+/- 9,373.38)
-test bench_task_overhead_rayon_optimised          ... bench:      40,994.87 ns/iter (+/- 13,775.16)
-test bench_task_overhead_zeropool                 ... bench:      50,517.70 ns/iter (+/- 3,595.43)
-test bench_task_overhead_zeropool_optimised       ... bench:      45,036.93 ns/iter (+/- 7,731.93)
+test bench_heavy_compute_rayon             ... bench:   4,612,748.55 ns/iter (+/- 650,510.12)
+test bench_heavy_compute_zeropool          ... bench:   4,433,491.25 ns/iter (+/- 325,246.06)
+test bench_indexed_computation_rayon       ... bench:      37,142.34 ns/iter (+/- 13,770.56)
+test bench_indexed_computation_zeropool    ... bench:      35,483.85 ns/iter (+/- 2,157.35)
+test bench_individual_tasks_rayon_empty    ... bench:      46,815.76 ns/iter (+/- 1,467.04)
+test bench_individual_tasks_zeropool_empty ... bench:     154,867.12 ns/iter (+/- 38,962.00)
+test bench_task_overhead_rayon             ... bench:      34,408.66 ns/iter (+/- 13,369.08)
+test bench_task_overhead_zeropool          ... bench:      33,548.53 ns/iter (+/- 1,711.41)
 ```
+
+*Note: the pool fares poorly for workloads dominated by millions of tiny, individual task submissions (see `bench_individual_tasks_zeropool_empty`). This is mainly due to per-submission allocation; prefer batching or larger tasks for best throughput.*
 
 ## Example Usage
 
