@@ -4,7 +4,6 @@ use crate::task_batch::TaskBatch;
 use crate::waiter::Waiter;
 use crate::{TaskFnPointer, task_future::TaskFuture};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::atomic::{Ordering as _Ordering, fence};
 
 pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
@@ -44,7 +43,6 @@ impl Queue {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
 
-        fence(_Ordering::SeqCst);
         self.waiter.notify(params.len());
         future
     }
@@ -95,8 +93,7 @@ impl Queue {
     }
 
     pub fn shutdown(&self) {
-        self.shutdown.store(true, Ordering::Relaxed);
-        fence(_Ordering::SeqCst);
+        self.shutdown.store(true, Ordering::Release);
         self.waiter.notify(usize::MAX);
     }
 }

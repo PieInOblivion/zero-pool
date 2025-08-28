@@ -5,13 +5,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, Thread};
 
 pub struct Waiter {
-    // hot atomics first to keep them on separate cache lines and away from other fields
     registered: PaddedAtomicUsize,
     top: PaddedAtomicUsize,
-    // treiber lifo stack: per-worker `next` pointers (padded per entry)
+    // treiber lifo stack: per-worker next pointers
     stack_next: Box<[PaddedAtomicUsize]>,
-    // per-worker thread slots. each worker stores its Thread handle here once at startup.
-    // `ready` is release/set by the worker; readers use acquire to see the stored handle.
+    // worker thread slots. each worker stores its handle here once at startup
+    // ready is release/set by the worker. readers use acquire to see the stored handle
     worker_threads: Box<[ThreadSlot]>,
 }
 
@@ -32,7 +31,6 @@ impl ThreadSlot {
     }
 
     fn store_thread(&self, t: Thread) {
-        // write thread handle then publish with release so notifiers see it.
         unsafe {
             (*self.thread.get()).write(t);
         }
@@ -48,7 +46,6 @@ impl ThreadSlot {
     }
 
     unsafe fn drop_if_init(&self) {
-        // drop the stored Thread if the slot was initialized.
         if self.ready.load(Ordering::Acquire) {
             unsafe {
                 std::ptr::drop_in_place(
@@ -61,7 +58,7 @@ impl ThreadSlot {
 
 impl Waiter {
     pub fn new(worker_count: usize) -> Self {
-        // choose power-of-two capacity >= worker_count (used by other allocations)
+        // choose power-of-two capacity >= worker_count
         let mut cap = 1usize;
         while cap < worker_count {
             cap <<= 1;
@@ -84,12 +81,11 @@ impl Waiter {
         }
     }
 
-    /// register current thread into the per-worker slot.
-    /// worker must call this once before parking. the store uses release ordering.
+    /// register current thread into the per worker slot
+    /// worker must call this once before parking
     pub fn register_current_thread(&self, worker_id: usize) {
-        // Store the current thread handle into the preallocated slot.
+        // store the thread handle into the preallocated slot
         self.worker_threads[worker_id].store_thread(thread::current());
-        // count this registration
         self.registered.fetch_add(1, Ordering::AcqRel);
     }
 
@@ -97,9 +93,9 @@ impl Waiter {
         self.registered.load(Ordering::Acquire)
     }
 
-    /// push id onto the treiber stack. single-atomic fast-path.
+    /// push id onto the treiber stack. single atomic fast path
     /// we write next[id] (relaxed) then CAS top -> id (acqrel). this ordering is
-    /// enough because the worker has already published its thread handle.
+    /// enough because the worker has already published its thread handle
     fn enqueue_id(&self, id: usize) -> bool {
         loop {
             let head = self.top.load(Ordering::Acquire);
@@ -188,7 +184,7 @@ impl Waiter {
         }
 
         loop {
-            if shutdown.load(Ordering::Relaxed) {
+            if shutdown.load(Ordering::Acquire) {
                 return true;
             }
             if predicate() {
@@ -200,7 +196,7 @@ impl Waiter {
                 // happens before park: park returns immediately if unparked earlier.
                 thread::park();
 
-                if shutdown.load(Ordering::Relaxed) {
+                if shutdown.load(Ordering::Acquire) {
                     return true;
                 }
                 if predicate() {
