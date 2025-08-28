@@ -17,6 +17,7 @@ pub fn spawn_worker(
             queue.register_worker_thread(id);
             // signal registration complete and wait for all workers + main
             barrier.wait();
+
             loop {
                 while let Some((batch, first_param, future)) = queue.get_next_batch() {
                     let task_fn = batch.task_fn();
@@ -33,9 +34,11 @@ pub fn spawn_worker(
                     future.complete_many(completed);
                 }
 
-                if queue.wait_for_signal(id) {
+                if queue.is_shutdown() {
                     break;
                 }
+
+                queue.wait_for_signal(id);
             }
         })
         .expect("spawn failed")

@@ -77,10 +77,15 @@ impl Queue {
         self.waiter.register_current_thread(worker_id);
     }
 
-    // bool returns if shutdown has been set
-    pub fn wait_for_signal(&self, worker_id: usize) -> bool {
+    // wait until work is available or shutdown
+    pub fn wait_for_signal(&self, worker_id: usize) {
         self.waiter
-            .wait_for(|| self.has_tasks(), &self.shutdown, worker_id)
+            .wait_for(|| self.has_tasks() || self.is_shutdown(), worker_id);
+    }
+
+    /// Query whether shutdown has been requested.
+    pub fn is_shutdown(&self) -> bool {
+        self.shutdown.load(Ordering::Acquire)
     }
 
     pub fn has_tasks(&self) -> bool {
