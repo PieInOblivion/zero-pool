@@ -5,7 +5,7 @@ This is an experimental thread pool implementation focused on exploring lock-fre
 
 ## Key Features:
 
-- **Zero locks** - completely lock-free
+- **Zero locks** - lock-free
 - **Zero queue limit** - unbounded
 - **Zero channels** - no std/crossbeam channel overhead
 - **Zero virtual dispatch** - function pointer dispatch avoids vtable lookups

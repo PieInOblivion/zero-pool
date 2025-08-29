@@ -19,6 +19,8 @@ pub fn spawn_worker(
             barrier.wait();
 
             loop {
+                queue.wait_for_signal(id);
+
                 while let Some((batch, first_param, future)) = queue.get_next_batch() {
                     let task_fn = batch.task_fn();
                     let mut completed = 1;
@@ -37,8 +39,6 @@ pub fn spawn_worker(
                 if queue.is_shutdown() {
                     break;
                 }
-
-                queue.wait_for_signal(id);
             }
         })
         .expect("spawn failed")
