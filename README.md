@@ -32,8 +32,6 @@ test bench_task_overhead_rayon             ... bench:      28,578.07 ns/iter (+/
 test bench_task_overhead_zeropool          ... bench:      33,042.40 ns/iter (+/- 4,096.13)
 ```
 
-*Note: the pool fares poorly for workloads dominated by millions of tiny, individual task submissions (see `bench_individual_tasks_zeropool_empty`). This is mainly due to per-submission allocation; prefer batching or larger tasks for best throughput.*
-
 ## Example Usage
 
 ### Submitting a Single Task
