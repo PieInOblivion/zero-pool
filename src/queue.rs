@@ -1,31 +1,43 @@
 use crate::TaskParamPointer;
-use crate::padded_type::PaddedAtomicPtr;
+use crate::padded_type::{PaddedAtomicBool, PaddedAtomicPtr};
 use crate::task_batch::TaskBatch;
-use crate::waiter::Waiter;
 use crate::{TaskFnPointer, task_future::TaskFuture};
+use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::{self, Thread};
 
 pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
     tail: PaddedAtomicPtr<TaskBatch>,
-    waiter: Waiter,
+    parked: Box<[PaddedAtomicBool]>,
+    threads: Box<[UnsafeCell<Option<Thread>>]>,
     shutdown: AtomicBool,
 }
+
+unsafe impl Sync for Queue {}
 
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
         fn noop(_: *const ()) {}
-        let empty_slice: &[u8] = &[];
-        let anchor_node = Box::into_raw(Box::new(TaskBatch::new(
+        let anchor_node = Box::into_raw(Box::new(TaskBatch::new::<u8>(
             noop,
-            empty_slice,
+            &[],
             TaskFuture::new(0),
         )));
+
+        let mut p = Vec::with_capacity(worker_count);
+        let mut t = Vec::with_capacity(worker_count);
+
+        for _ in 0..worker_count {
+            p.push(PaddedAtomicBool::new(false));
+            t.push(UnsafeCell::new(None));
+        }
 
         Queue {
             head: PaddedAtomicPtr::new(anchor_node),
             tail: PaddedAtomicPtr::new(anchor_node),
-            waiter: Waiter::new(worker_count),
+            parked: p.into_boxed_slice(),
+            threads: t.into_boxed_slice(),
             shutdown: AtomicBool::new(false),
         }
     }
@@ -43,7 +55,7 @@ impl Queue {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
 
-        self.waiter.notify(params.len());
+        self.notify(params.len());
         future
     }
 
@@ -73,14 +85,40 @@ impl Queue {
         }
     }
 
+    pub fn notify(&self, mut count: usize) {
+        count = count.min(self.threads.len());
+
+        for i in 0..self.threads.len() {
+            if self.parked[i].load(Ordering::Acquire) {
+                unsafe {
+                    if let Some(t) = (&*self.threads[i].get()).as_ref() {
+                        t.unpark();
+                    }
+                }
+                count -= 1;
+            }
+
+            if count == 0 {
+                break;
+            }
+        }
+    }
+
     pub fn register_worker_thread(&self, worker_id: usize) {
-        self.waiter.register_current_thread(worker_id);
+        unsafe {
+            *self.threads[worker_id].get() = Some(thread::current());
+        }
     }
 
     // wait until work is available or shutdown
     pub fn wait_for_signal(&self, worker_id: usize) {
-        self.waiter
-            .wait_for(|| self.has_tasks() || self.is_shutdown(), worker_id);
+        self.parked[worker_id].store(true, Ordering::Release);
+
+        while !self.has_tasks() && !self.is_shutdown() {
+            thread::park();
+        }
+
+        self.parked[worker_id].store(false, Ordering::Release);
     }
 
     pub fn is_shutdown(&self) -> bool {
@@ -94,7 +132,7 @@ impl Queue {
 
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Release);
-        self.waiter.notify(usize::MAX);
+        self.notify(usize::MAX);
     }
 }
 
