@@ -9,7 +9,7 @@ use std::thread::{self, Thread};
 pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
     tail: PaddedAtomicPtr<TaskBatch>,
-    foot: PaddedAtomicPtr<TaskBatch>,
+    oldest: PaddedAtomicPtr<TaskBatch>,
     hazards: Box<[PaddedAtomicPtr<TaskBatch>]>,
     threads: Box<[UnsafeCell<Option<Thread>>]>,
     shutdown: AtomicBool,
@@ -37,7 +37,7 @@ impl Queue {
         Queue {
             head: PaddedAtomicPtr::new(anchor_node),
             tail: PaddedAtomicPtr::new(anchor_node),
-            foot: PaddedAtomicPtr::new(anchor_node),
+            oldest: PaddedAtomicPtr::new(anchor_node),
             hazards: p.into_boxed_slice(),
             threads: t.into_boxed_slice(),
             shutdown: AtomicBool::new(false),
@@ -96,7 +96,7 @@ impl Queue {
         count = count.min(self.threads.len());
 
         for i in 0..self.threads.len() {
-            // hazard == null means worker is parked; unpark it
+            // hazard is null means worker is parked; unpark it
             if self.hazards[i].load(Ordering::Acquire).is_null() {
                 unsafe {
                     if let Some(t) = (&*self.threads[i].get()).as_ref() {
@@ -135,32 +135,32 @@ impl Queue {
         let head_snapshot = self.head.load(Ordering::Acquire);
 
         loop {
-            let foot = self.foot.load(Ordering::Acquire);
-            if foot.is_null() {
+            let oldest = self.oldest.load(Ordering::Acquire);
+            if oldest.is_null() {
                 break;
             }
 
-            let next = unsafe { (*foot).next.load(Ordering::Acquire) };
+            let next = unsafe { (*oldest).next.load(Ordering::Acquire) };
             if next.is_null() || next == head_snapshot {
                 break;
             }
 
-            // if any worker has this foot as a hazard, don't reclaim it now
+            // if any worker has this oldest as a hazard, don't reclaim it now
             if self
                 .hazards
                 .iter()
-                .any(|h| h.load(Ordering::Acquire) == foot)
+                .any(|h| h.load(Ordering::Acquire) == oldest)
             {
                 break;
             }
 
-            // attempt to advance foot, on success we own the old foot and can drop it
+            // attempt to advance oldest, on success we own the old oldest and can drop it
             match self
-                .foot
-                .compare_exchange_weak(foot, next, Ordering::AcqRel, Ordering::Relaxed)
+                .oldest
+                .compare_exchange_weak(oldest, next, Ordering::AcqRel, Ordering::Relaxed)
             {
                 Ok(_) => {
-                    unsafe { drop(Box::from_raw(foot)) }
+                    unsafe { drop(Box::from_raw(oldest)) }
                     continue;
                 }
                 Err(_) => {
@@ -187,7 +187,7 @@ impl Queue {
 
 impl Drop for Queue {
     fn drop(&mut self) {
-        let mut current = self.foot.load(Ordering::Acquire);
+        let mut current = self.oldest.load(Ordering::Acquire);
         while !current.is_null() {
             let batch = unsafe { Box::from_raw(current) };
             current = batch.next.load(Ordering::Acquire);
