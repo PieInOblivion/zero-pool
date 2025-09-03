@@ -132,10 +132,10 @@ impl Queue {
     // this is a best effort attempt until first fail memory reclaiming
     pub fn try_reclaim(&self) {
         // this is conservative but avoids repeated head loads.
-        let head_snapshot = self.head.load(Ordering::Acquire);
+        let head_snapshot = self.head.load(Ordering::Relaxed);
 
         loop {
-            let oldest = self.oldest.load(Ordering::Acquire);
+            let oldest = self.oldest.load(Ordering::Relaxed);
             if oldest.is_null() {
                 break;
             }
@@ -155,10 +155,12 @@ impl Queue {
             }
 
             // attempt to advance oldest, on success we own the old oldest and can drop it
-            match self
-                .oldest
-                .compare_exchange_weak(oldest, next, Ordering::AcqRel, Ordering::Relaxed)
-            {
+            match self.oldest.compare_exchange_weak(
+                oldest,
+                next,
+                Ordering::Release,
+                Ordering::Relaxed,
+            ) {
                 Ok(_) => {
                     unsafe { drop(Box::from_raw(oldest)) }
                     continue;
