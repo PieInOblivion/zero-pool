@@ -33,10 +33,6 @@ pub fn spawn_worker(
                         completed += 1;
                     }
 
-                    // do not clear the hazard here; hazards are only cleared when
-                    // the worker explicitly parks (in wait_for_signal) or overwritten
-                    // by the next set_hazard call. Only the thread that completed
-                    // the last tasks for this batch attempts reclamation.
                     if future.complete_many(completed) {
                         queue.try_reclaim();
                     }

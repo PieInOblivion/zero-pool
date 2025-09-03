@@ -135,10 +135,7 @@ impl Queue {
         let head_snapshot = self.head.load(Ordering::Relaxed);
 
         loop {
-            let oldest = self.oldest.load(Ordering::Relaxed);
-            if oldest.is_null() {
-                break;
-            }
+            let oldest = self.oldest.load(Ordering::Acquire);
 
             let next = unsafe { (*oldest).next.load(Ordering::Acquire) };
             if next.is_null() || next == head_snapshot {
