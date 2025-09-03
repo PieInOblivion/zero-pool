@@ -74,14 +74,17 @@ impl TaskFuture {
     }
 
     // completes multiple tasks, decrements counter and notifies if all done
-    pub(crate) fn complete_many(&self, count: usize) {
+    // returns true if this call completed the final tasks (i.e., future is now done)
+    pub(crate) fn complete_many(&self, count: usize) -> bool {
         let remaining_count = self.remaining.fetch_sub(count, Ordering::Release);
 
-        // if this completed the last tasks, notify waiters
-        if remaining_count == count {
-            let (lock, cvar) = &*self.state;
-            let _guard = lock.lock().unwrap();
-            cvar.notify_all();
+        if remaining_count != count {
+            return false;
         }
+
+        let (lock, cvar) = &*self.state;
+        let _guard = lock.lock().unwrap();
+        cvar.notify_all();
+        return true;
     }
 }

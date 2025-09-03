@@ -1,5 +1,5 @@
 use crate::TaskParamPointer;
-use crate::padded_type::{PaddedAtomicBool, PaddedAtomicPtr};
+use crate::padded_type::PaddedAtomicPtr;
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, task_future::TaskFuture};
 use std::cell::UnsafeCell;
@@ -9,7 +9,8 @@ use std::thread::{self, Thread};
 pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
     tail: PaddedAtomicPtr<TaskBatch>,
-    parked: Box<[PaddedAtomicBool]>,
+    foot: PaddedAtomicPtr<TaskBatch>,
+    hazards: Box<[PaddedAtomicPtr<TaskBatch>]>,
     threads: Box<[UnsafeCell<Option<Thread>>]>,
     shutdown: AtomicBool,
 }
@@ -29,14 +30,15 @@ impl Queue {
         let mut t = Vec::with_capacity(worker_count);
 
         for _ in 0..worker_count {
-            p.push(PaddedAtomicBool::new(false));
+            p.push(PaddedAtomicPtr::new(std::ptr::null_mut()));
             t.push(UnsafeCell::new(None));
         }
 
         Queue {
             head: PaddedAtomicPtr::new(anchor_node),
             tail: PaddedAtomicPtr::new(anchor_node),
-            parked: p.into_boxed_slice(),
+            foot: PaddedAtomicPtr::new(anchor_node),
+            hazards: p.into_boxed_slice(),
             threads: t.into_boxed_slice(),
             shutdown: AtomicBool::new(false),
         }
@@ -59,11 +61,16 @@ impl Queue {
         future
     }
 
-    pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
+    pub fn get_next_batch(
+        &self,
+        worker_id: usize,
+    ) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
             let batch = unsafe { &*current };
+
+            self.hazards[worker_id].store(batch as *const _ as *mut _, Ordering::Release);
 
             if let Some(param) = batch.claim_next_param() {
                 return Some((batch, param, &batch.future));
@@ -89,7 +96,8 @@ impl Queue {
         count = count.min(self.threads.len());
 
         for i in 0..self.threads.len() {
-            if self.parked[i].load(Ordering::Acquire) {
+            // hazard == null means worker is parked; unpark it
+            if self.hazards[i].load(Ordering::Acquire).is_null() {
                 unsafe {
                     if let Some(t) = (&*self.threads[i].get()).as_ref() {
                         t.unpark();
@@ -112,13 +120,54 @@ impl Queue {
 
     // wait until work is available or shutdown
     pub fn wait_for_signal(&self, worker_id: usize) {
-        self.parked[worker_id].store(true, Ordering::Release);
+        self.hazards[worker_id].store(std::ptr::null_mut(), Ordering::Release);
 
         while !self.has_tasks() && !self.is_shutdown() {
             thread::park();
         }
 
-        self.parked[worker_id].store(false, Ordering::Release);
+        // when returning, worker will set its hazard before processing
+    }
+
+    // this is a best effort attempt until first fail memory reclaiming
+    pub fn try_reclaim(&self) {
+        // this is conservative but avoids repeated head loads.
+        let head_snapshot = self.head.load(Ordering::Acquire);
+
+        loop {
+            let foot = self.foot.load(Ordering::Acquire);
+            if foot.is_null() {
+                break;
+            }
+
+            let next = unsafe { (*foot).next.load(Ordering::Acquire) };
+            if next.is_null() || next == head_snapshot {
+                break;
+            }
+
+            // if any worker has this foot as a hazard, don't reclaim it now
+            if self
+                .hazards
+                .iter()
+                .any(|h| h.load(Ordering::Acquire) == foot)
+            {
+                break;
+            }
+
+            // attempt to advance foot, on success we own the old foot and can drop it
+            match self
+                .foot
+                .compare_exchange_weak(foot, next, Ordering::AcqRel, Ordering::Relaxed)
+            {
+                Ok(_) => {
+                    unsafe { drop(Box::from_raw(foot)) }
+                    continue;
+                }
+                Err(_) => {
+                    break;
+                }
+            }
+        }
     }
 
     pub fn is_shutdown(&self) -> bool {
@@ -138,10 +187,10 @@ impl Queue {
 
 impl Drop for Queue {
     fn drop(&mut self) {
-        let mut current = self.head.load(Ordering::Relaxed);
+        let mut current = self.foot.load(Ordering::Acquire);
         while !current.is_null() {
             let batch = unsafe { Box::from_raw(current) };
-            current = batch.next.load(Ordering::Relaxed);
+            current = batch.next.load(Ordering::Acquire);
         }
     }
 }

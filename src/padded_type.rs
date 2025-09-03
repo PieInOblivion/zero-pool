@@ -1,6 +1,6 @@
 use std::{
     ops::{Deref, DerefMut},
-    sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize},
+    sync::atomic::{AtomicPtr, AtomicUsize},
 };
 
 // a generic type padded to fill one cache line, 64 bytes
@@ -39,17 +39,10 @@ impl<T, const PAD: usize> DerefMut for PaddedType<T, PAD> {
 
 pub type PaddedAtomicUsize = PaddedType<AtomicUsize, 56>;
 pub type PaddedAtomicPtr<T> = PaddedType<AtomicPtr<T>, 56>;
-pub type PaddedAtomicBool = PaddedType<AtomicBool, 63>;
 
 impl PaddedAtomicUsize {
     pub fn new(value: usize) -> Self {
         Self::new_padded(AtomicUsize::new(value))
-    }
-}
-
-impl PaddedAtomicBool {
-    pub fn new(value: bool) -> Self {
-        Self::new_padded(AtomicBool::new(value))
     }
 }
 
