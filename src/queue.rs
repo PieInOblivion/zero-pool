@@ -68,9 +68,15 @@ impl Queue {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
+            self.hazards[worker_id].store(current as *mut TaskBatch, Ordering::Release);
+
             let batch = unsafe { &*current };
 
-            self.hazards[worker_id].store(batch as *const _ as *mut _, Ordering::Release);
+            let head_now = self.head.load(Ordering::Acquire);
+            if head_now != current {
+                current = head_now;
+                continue;
+            }
 
             if let Some(param) = batch.claim_next_param() {
                 return Some((batch, param, &batch.future));
