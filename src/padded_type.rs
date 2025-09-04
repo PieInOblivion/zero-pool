@@ -37,9 +37,15 @@ impl<T, const PAD: usize> DerefMut for PaddedType<T, PAD> {
     }
 }
 
-pub type PaddedAtomicUsize = PaddedType<AtomicUsize, 56>;
 pub type PaddedAtomicPtr<T> = PaddedType<AtomicPtr<T>, 56>;
+pub type PaddedAtomicUsize = PaddedType<AtomicUsize, 56>;
 pub type PaddedAtomicU8 = PaddedType<AtomicU8, 63>;
+
+impl<T> PaddedAtomicPtr<T> {
+    pub fn new(ptr: *mut T) -> Self {
+        Self::new_padded(AtomicPtr::new(ptr))
+    }
+}
 
 impl PaddedAtomicUsize {
     pub fn new(value: usize) -> Self {
@@ -50,11 +56,5 @@ impl PaddedAtomicUsize {
 impl PaddedAtomicU8 {
     pub fn new(value: u8) -> Self {
         Self::new_padded(AtomicU8::new(value))
-    }
-}
-
-impl<T> PaddedAtomicPtr<T> {
-    pub fn new(ptr: *mut T) -> Self {
-        Self::new_padded(AtomicPtr::new(ptr))
     }
 }

@@ -9,8 +9,8 @@ use std::thread::{self, Thread};
 pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
     tail: PaddedAtomicPtr<TaskBatch>,
-    oldest: PaddedAtomicPtr<TaskBatch>,
     reclaim_counter: PaddedAtomicU8,
+    oldest: PaddedAtomicPtr<TaskBatch>,
     hazards: Box<[PaddedAtomicPtr<TaskBatch>]>,
     threads: Box<[UnsafeCell<Option<Thread>>]>,
     shutdown: AtomicBool,
@@ -38,8 +38,8 @@ impl Queue {
         Queue {
             head: PaddedAtomicPtr::new(anchor_node),
             tail: PaddedAtomicPtr::new(anchor_node),
-            oldest: PaddedAtomicPtr::new(anchor_node),
             reclaim_counter: PaddedAtomicU8::new(0),
+            oldest: PaddedAtomicPtr::new(anchor_node),
             hazards: p.into_boxed_slice(),
             threads: t.into_boxed_slice(),
             shutdown: AtomicBool::new(false),
