@@ -1,5 +1,5 @@
 use crate::TaskParamPointer;
-use crate::padded_type::PaddedAtomicPtr;
+use crate::padded_type::{PaddedAtomicPtr, PaddedAtomicU8};
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, task_future::TaskFuture};
 use std::cell::UnsafeCell;
@@ -10,6 +10,7 @@ pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
     tail: PaddedAtomicPtr<TaskBatch>,
     oldest: PaddedAtomicPtr<TaskBatch>,
+    reclaim_counter: PaddedAtomicU8,
     hazards: Box<[PaddedAtomicPtr<TaskBatch>]>,
     threads: Box<[UnsafeCell<Option<Thread>>]>,
     shutdown: AtomicBool,
@@ -38,10 +39,16 @@ impl Queue {
             head: PaddedAtomicPtr::new(anchor_node),
             tail: PaddedAtomicPtr::new(anchor_node),
             oldest: PaddedAtomicPtr::new(anchor_node),
+            reclaim_counter: PaddedAtomicU8::new(0),
             hazards: p.into_boxed_slice(),
             threads: t.into_boxed_slice(),
             shutdown: AtomicBool::new(false),
         }
+    }
+
+    // clean every 256 task batches, this leaves 32KiB before cleaning
+    pub fn should_reclaim(&self) -> bool {
+        u8::MAX == self.reclaim_counter.fetch_add(1, Ordering::Relaxed)
     }
 
     pub fn push_task_batch<T>(&self, task_fn: TaskFnPointer, params: &[T]) -> TaskFuture {
@@ -136,7 +143,11 @@ impl Queue {
     }
 
     // this is a best effort attempt until first fail memory reclaiming
-    pub fn try_reclaim(&self) {
+    pub fn reclaim(&self) {
+        // throttle reclamation centrally so workers can call this unconditionally
+        if !self.should_reclaim() {
+            return;
+        }
         // this is conservative but avoids repeated head loads.
         let head_snapshot = self.head.load(Ordering::Relaxed);
 

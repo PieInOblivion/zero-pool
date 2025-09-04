@@ -34,7 +34,7 @@ pub fn spawn_worker(
                     }
 
                     if future.complete_many(completed) {
-                        queue.try_reclaim();
+                        queue.reclaim();
                     }
                 }
 
