@@ -21,11 +21,12 @@ pub fn spawn_worker(
             loop {
                 queue.wait_for_signal(id);
 
+                queue.enter_critical(id);
+
                 while let Some((batch, first_param, future)) = queue.get_next_batch(id) {
                     let task_fn = batch.task_fn();
                     let mut completed = 1;
 
-                    // process first claimed param
                     task_fn(first_param);
 
                     while let Some(param) = batch.claim_next_param() {

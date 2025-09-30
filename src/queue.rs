@@ -1,17 +1,21 @@
 use crate::TaskParamPointer;
-use crate::padded_type::{PaddedAtomicPtr, PaddedAtomicU8};
+use crate::padded_type::{PaddedAtomicPtr, PaddedAtomicU8, PaddedAtomicUsize};
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, task_future::TaskFuture};
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, Thread};
 
+const NOT_IN_CRITICAL: usize = usize::MAX;
+const EPOCH_MASK: usize = usize::MAX >> 1; // use only lower bits for epoch
+
 pub struct Queue {
     head: PaddedAtomicPtr<TaskBatch>,
     tail: PaddedAtomicPtr<TaskBatch>,
     reclaim_counter: PaddedAtomicU8,
     oldest: PaddedAtomicPtr<TaskBatch>,
-    hazards: Box<[PaddedAtomicPtr<TaskBatch>]>,
+    global_epoch: PaddedAtomicUsize,
+    local_epochs: Box<[PaddedAtomicUsize]>,
     threads: Box<[UnsafeCell<Option<Thread>>]>,
     shutdown: AtomicBool,
 }
@@ -27,11 +31,11 @@ impl Queue {
             TaskFuture::new(0),
         )));
 
-        let mut p = Vec::with_capacity(worker_count);
+        let mut epochs = Vec::with_capacity(worker_count);
         let mut t = Vec::with_capacity(worker_count);
 
         for _ in 0..worker_count {
-            p.push(PaddedAtomicPtr::new(std::ptr::null_mut()));
+            epochs.push(PaddedAtomicUsize::new(NOT_IN_CRITICAL));
             t.push(UnsafeCell::new(None));
         }
 
@@ -40,15 +44,11 @@ impl Queue {
             tail: PaddedAtomicPtr::new(anchor_node),
             reclaim_counter: PaddedAtomicU8::new(0),
             oldest: PaddedAtomicPtr::new(anchor_node),
-            hazards: p.into_boxed_slice(),
+            global_epoch: PaddedAtomicUsize::new(0),
+            local_epochs: epochs.into_boxed_slice(),
             threads: t.into_boxed_slice(),
             shutdown: AtomicBool::new(false),
         }
-    }
-
-    // clean every 256 task batches, this leaves 32KiB before cleaning
-    pub fn should_reclaim(&self) -> bool {
-        u8::MAX == self.reclaim_counter.fetch_add(1, Ordering::Relaxed)
     }
 
     pub fn push_task_batch<T>(&self, task_fn: TaskFnPointer, params: &[T]) -> TaskFuture {
@@ -59,7 +59,7 @@ impl Queue {
         let future = TaskFuture::new(params.len());
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(task_fn, params, future.clone())));
 
-        let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
+        let prev_tail = self.tail.swap(new_batch, Ordering::Release);
         unsafe {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
@@ -68,22 +68,25 @@ impl Queue {
         future
     }
 
+    #[inline]
+    pub fn enter_critical(&self, worker_id: usize) {
+        let epoch = self.global_epoch.load(Ordering::Acquire) & EPOCH_MASK;
+        self.local_epochs[worker_id].store(epoch, Ordering::Release);
+    }
+
+    #[inline]
+    pub fn exit_critical(&self, worker_id: usize) {
+        self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Release);
+    }
+
     pub fn get_next_batch(
         &self,
-        worker_id: usize,
+        _worker_id: usize,
     ) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
-            self.hazards[worker_id].store(current as *mut TaskBatch, Ordering::Release);
-
             let batch = unsafe { &*current };
-
-            let head_now = self.head.load(Ordering::Acquire);
-            if head_now != current {
-                current = head_now;
-                continue;
-            }
 
             if let Some(param) = batch.claim_next_param() {
                 return Some((batch, param, &batch.future));
@@ -94,33 +97,38 @@ impl Queue {
                 return None;
             }
 
-            // help advance head past empty batch
-            let _ = self.head.compare_exchange_weak(
+            // try to advance head, but continue regardless
+            match self.head.compare_exchange_weak(
                 current,
                 next,
                 Ordering::Release,
                 Ordering::Relaxed,
-            );
-            current = next;
+            ) {
+                Ok(_) => current = next,
+                Err(new_head) => current = new_head,
+            }
         }
     }
 
     pub fn notify(&self, mut count: usize) {
-        count = count.min(self.threads.len());
+        if count == 0 {
+            return;
+        }
 
-        for i in 0..self.threads.len() {
-            // hazard is null means worker is parked; unpark it
-            if self.hazards[i].load(Ordering::Acquire).is_null() {
+        let num_workers = self.threads.len();
+        count = count.min(num_workers);
+
+        for i in 0..num_workers {
+            if self.local_epochs[i].load(Ordering::Acquire) == NOT_IN_CRITICAL {
                 unsafe {
-                    if let Some(t) = (&*self.threads[i].get()).as_ref() {
+                    if let Some(t) = &*self.threads[i].get() {
                         t.unpark();
+                        count -= 1;
+                        if count == 0 {
+                            break;
+                        }
                     }
                 }
-                count -= 1;
-            }
-
-            if count == 0 {
-                break;
             }
         }
     }
@@ -133,54 +141,81 @@ impl Queue {
 
     // wait until work is available or shutdown
     pub fn wait_for_signal(&self, worker_id: usize) {
-        self.hazards[worker_id].store(std::ptr::null_mut(), Ordering::Release);
+        self.exit_critical(worker_id);
 
         while !self.has_tasks() && !self.is_shutdown() {
             thread::park();
         }
 
-        // when returning, worker will set its hazard before processing
+        // when returning, worker will enter critical section before processing
     }
 
-    // this is a best effort attempt until first fail memory reclaiming
+    fn can_reclaim(&self, reclaim_epoch: usize) -> bool {
+        for local_epoch in self.local_epochs.iter() {
+            let e = local_epoch.load(Ordering::Acquire);
+            if e == NOT_IN_CRITICAL {
+                continue;
+            }
+
+            // handle wraparound: compute distance wrapping around
+            let distance = reclaim_epoch.wrapping_sub(e) & EPOCH_MASK;
+
+            // if distance is small (< EPOCH_MASK/2), worker is still on old epoch
+            // this handles wraparound correctly
+            if distance < (EPOCH_MASK / 2) {
+                return false;
+            }
+        }
+        true
+    }
+
     pub fn reclaim(&self) {
-        // throttle reclamation centrally so workers can call this unconditionally
-        if !self.should_reclaim() {
+        // throttle reclamation: only run every 256 completed batches
+        let counter = self.reclaim_counter.fetch_add(1, Ordering::Relaxed);
+        if counter != u8::MAX {
             return;
         }
-        // this is conservative but avoids repeated head loads.
-        let head_snapshot = self.head.load(Ordering::Relaxed);
 
+        let head = self.head.load(Ordering::Acquire);
+        let oldest = self.oldest.load(Ordering::Acquire);
+
+        // quick check: is there anything to reclaim?
+        let next = unsafe { (*oldest).next.load(Ordering::Acquire) };
+        if next.is_null() || next == head {
+            return;
+        }
+
+        // advance global epoch once for this reclamation cycle and mask it
+        let reclaim_epoch = self.global_epoch.fetch_add(1, Ordering::Release) & EPOCH_MASK;
+
+        // check if safe to reclaim anything
+        if !self.can_reclaim(reclaim_epoch) {
+            return;
+        }
+
+        // now do the actual reclamation
+        let mut current = oldest;
         loop {
-            let oldest = self.oldest.load(Ordering::Acquire);
+            let next = unsafe { (*current).next.load(Ordering::Acquire) };
 
-            let next = unsafe { (*oldest).next.load(Ordering::Acquire) };
-            if next.is_null() || next == head_snapshot {
+            if next.is_null() || next == head {
                 break;
             }
 
-            // if any worker has this oldest as a hazard, don't reclaim it now
-            if self
-                .hazards
-                .iter()
-                .any(|h| h.load(Ordering::Acquire) == oldest)
-            {
-                break;
-            }
-
-            // attempt to advance oldest, on success we own the old oldest and can drop it
+            // try to advance oldest pointer
             match self.oldest.compare_exchange_weak(
-                oldest,
+                current,
                 next,
                 Ordering::Release,
-                Ordering::Relaxed,
+                Ordering::Acquire,
             ) {
                 Ok(_) => {
-                    unsafe { drop(Box::from_raw(oldest)) }
-                    continue;
+                    // we own current, safe to free
+                    unsafe { drop(Box::from_raw(current)) };
+                    current = next;
                 }
-                Err(_) => {
-                    break;
+                Err(new_oldest) => {
+                    current = new_oldest;
                 }
             }
         }
@@ -203,7 +238,9 @@ impl Queue {
 
 impl Drop for Queue {
     fn drop(&mut self) {
-        let mut current = self.oldest.load(Ordering::Acquire);
+        // walk from head to ensure we clean up all batches
+        // (there may be batches between head and oldest that haven't been reclaimed)
+        let mut current = self.head.load(Ordering::Acquire);
         while !current.is_null() {
             let batch = unsafe { Box::from_raw(current) };
             current = batch.next.load(Ordering::Acquire);
