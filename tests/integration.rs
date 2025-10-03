@@ -106,7 +106,7 @@ fn test_single_worker_behavior() {
 
     println!("Testing single worker pool behavior...");
 
-    let mut results = vec![0u64; 5];
+    let mut results = [0u64; 5];
     let start = Instant::now();
 
     let tasks: Vec<_> = results
@@ -369,7 +369,7 @@ fn test_complex_workload_scaling() {
     // Test how complex tasks scale with worker count
     for workers in [1, 2, 4] {
         let pool = ZeroPool::with_workers(workers);
-        let mut results = vec![0.0; 20];
+        let mut results = [0.0; 20];
 
         let params: Vec<_> = results
             .iter_mut()

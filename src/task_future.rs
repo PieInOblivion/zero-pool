@@ -85,6 +85,6 @@ impl TaskFuture {
         let (lock, cvar) = &*self.state;
         let _guard = lock.lock().unwrap();
         cvar.notify_all();
-        return true;
+        true
     }
 }

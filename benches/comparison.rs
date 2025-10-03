@@ -183,9 +183,9 @@ fn bench_heavy_compute_zeropool(b: &mut Bencher) {
         let mut results = vec![0u64; TASK_COUNT];
 
         let mut tasks = Vec::with_capacity(TASK_COUNT);
-        for i in 0..TASK_COUNT {
+        for (i, &seed) in seeds.iter().enumerate().take(TASK_COUNT) {
             tasks.push(HeavyComputeTask {
-                seed: seeds[i],
+                seed,
                 index: i,
                 results: &mut results,
             });

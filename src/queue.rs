@@ -228,9 +228,7 @@ impl Queue {
 
 impl Drop for Queue {
     fn drop(&mut self) {
-        // walk from head to ensure we clean up all batches
-        // (there may be batches between head and oldest that haven't been reclaimed)
-        let mut current = self.head.load(Ordering::Relaxed);
+        let mut current = self.oldest.load(Ordering::Relaxed);
         while !current.is_null() {
             let batch = unsafe { Box::from_raw(current) };
             current = batch.next.load(Ordering::Relaxed);
