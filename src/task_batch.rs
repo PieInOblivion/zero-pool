@@ -6,10 +6,10 @@ use crate::{
 
 pub struct TaskBatch {
     next_item: PaddedAtomicUsize,
-    task_fn_ptr: TaskFnPointer,
     params_ptr: *const u8,
     params_len: usize,
     param_stride: usize,
+    task_fn_ptr: TaskFnPointer,
     pub future: TaskFuture,
     pub next: AtomicPtr<TaskBatch>,
 }
@@ -18,10 +18,10 @@ impl TaskBatch {
     pub fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
         TaskBatch {
             next_item: PaddedAtomicUsize::new(0),
-            task_fn_ptr,
             params_ptr: params.as_ptr() as *const u8,
             params_len: params.len(),
             param_stride: std::mem::size_of::<T>(),
+            task_fn_ptr,
             future,
             next: AtomicPtr::new(std::ptr::null_mut()),
         }

@@ -167,10 +167,10 @@ impl Queue {
         }
 
         let head = self.head.load(Ordering::Acquire);
-        let oldest = self.oldest.load(Ordering::Acquire);
+        let mut current = self.oldest.load(Ordering::Acquire);
 
         // quick check: is there anything to reclaim?
-        let next = unsafe { (*oldest).next.load(Ordering::Acquire) };
+        let mut next = unsafe { (*current).next.load(Ordering::Acquire) };
         if next.is_null() || next == head {
             return;
         }
@@ -184,14 +184,7 @@ impl Queue {
         }
 
         // now do the actual reclamation
-        let mut current = oldest;
-        loop {
-            let next = unsafe { (*current).next.load(Ordering::Acquire) };
-
-            if next.is_null() || next == head {
-                break;
-            }
-
+        while !next.is_null() && next != head {
             // try to advance oldest pointer
             match self.oldest.compare_exchange_weak(
                 current,
@@ -203,9 +196,11 @@ impl Queue {
                     // we own current, safe to free
                     unsafe { drop(Box::from_raw(current)) };
                     current = next;
+                    next = unsafe { (*current).next.load(Ordering::Acquire) };
                 }
                 Err(new_oldest) => {
                     current = new_oldest;
+                    next = unsafe { (*current).next.load(Ordering::Acquire) };
                 }
             }
         }
