@@ -118,6 +118,10 @@ impl ZeroPool {
 }
 
 impl Default for ZeroPool {
+    /// Creates a new thread pool with default settings
+    ///
+    /// Equivalent to calling `ZeroPool::new()`. Worker count is determined by
+    /// `std::thread::available_parallelism()`, falling back to 1 if unavailable.
     fn default() -> Self {
         Self::new()
     }
