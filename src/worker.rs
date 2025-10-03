@@ -19,14 +19,15 @@ pub fn spawn_worker(
             barrier.wait();
 
             loop {
-                queue.wait_for_signal(id);
+                queue.wait_for_signal();
 
-                queue.enter_critical(id);
-
-                while let Some((batch, first_param, future)) = queue.get_next_batch(id) {
+                while let Some((batch, first_param, future)) = {
+                    queue.update_epoch(id);
+                    queue.get_next_batch()
+                } {
                     let task_fn = batch.task_fn();
-                    let mut completed = 1;
 
+                    let mut completed = 1;
                     task_fn(first_param);
 
                     while let Some(param) = batch.claim_next_param() {
@@ -35,9 +36,12 @@ pub fn spawn_worker(
                     }
 
                     if future.complete_many(completed) {
+                        queue.update_epoch(id);
                         queue.reclaim();
                     }
                 }
+
+                queue.exit_epoch(id);
 
                 if queue.is_shutdown() {
                     break;

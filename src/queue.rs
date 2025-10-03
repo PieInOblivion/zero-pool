@@ -69,20 +69,17 @@ impl Queue {
     }
 
     #[inline]
-    pub fn enter_critical(&self, worker_id: usize) {
+    pub fn update_epoch(&self, worker_id: usize) {
         let epoch = self.global_epoch.load(Ordering::Acquire) & EPOCH_MASK;
         self.local_epochs[worker_id].store(epoch, Ordering::Release);
     }
 
     #[inline]
-    pub fn exit_critical(&self, worker_id: usize) {
+    pub fn exit_epoch(&self, worker_id: usize) {
         self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Release);
     }
 
-    pub fn get_next_batch(
-        &self,
-        _worker_id: usize,
-    ) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
+    pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
@@ -111,10 +108,6 @@ impl Queue {
     }
 
     pub fn notify(&self, mut count: usize) {
-        if count == 0 {
-            return;
-        }
-
         let num_workers = self.threads.len();
         count = count.min(num_workers);
 
@@ -140,14 +133,10 @@ impl Queue {
     }
 
     // wait until work is available or shutdown
-    pub fn wait_for_signal(&self, worker_id: usize) {
-        self.exit_critical(worker_id);
-
+    pub fn wait_for_signal(&self) {
         while !self.has_tasks() && !self.is_shutdown() {
             thread::park();
         }
-
-        // when returning, worker will enter critical section before processing
     }
 
     fn can_reclaim(&self, reclaim_epoch: usize) -> bool {
