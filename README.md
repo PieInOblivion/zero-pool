@@ -22,14 +22,14 @@ Since the library uses raw pointers, you must ensure parameter structs remain va
 
 ## Benchmarks
 ```rust
-test bench_heavy_compute_rayon             ... bench:   4,848,477.55 ns/iter (+/- 754,053.45)
-test bench_heavy_compute_zeropool          ... bench:   4,499,730.20 ns/iter (+/- 470,663.55)
-test bench_indexed_computation_rayon       ... bench:      35,823.16 ns/iter (+/- 13,229.60)
-test bench_indexed_computation_zeropool    ... bench:      36,956.51 ns/iter (+/- 3,995.92)
-test bench_individual_tasks_rayon_empty    ... bench:      44,887.17 ns/iter (+/- 2,517.05)
-test bench_individual_tasks_zeropool_empty ... bench:      57,069.83 ns/iter (+/- 15,891.82)
-test bench_task_overhead_rayon             ... bench:      35,688.05 ns/iter (+/- 10,786.13)
-test bench_task_overhead_zeropool          ... bench:      35,823.08 ns/iter (+/- 4,741.10)
+test bench_heavy_compute_rayon             ... bench:   4,879,891.95 ns/iter (+/- 686,055.45)
+test bench_heavy_compute_zeropool          ... bench:   4,430,550.20 ns/iter (+/- 268,825.43)
+test bench_indexed_computation_rayon       ... bench:      38,455.49 ns/iter (+/- 10,196.81)
+test bench_indexed_computation_zeropool    ... bench:      38,886.68 ns/iter (+/- 4,397.20)
+test bench_individual_tasks_rayon_empty    ... bench:      46,323.35 ns/iter (+/- 1,932.32)
+test bench_individual_tasks_zeropool_empty ... bench:      34,338.00 ns/iter (+/- 8,625.49)
+test bench_task_overhead_rayon             ... bench:      38,111.82 ns/iter (+/- 9,374.71)
+test bench_task_overhead_zeropool          ... bench:      35,772.84 ns/iter (+/- 5,534.74)
 ```
 
 ## Example Usage
