@@ -79,6 +79,7 @@ impl Queue {
         self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Release);
     }
 
+    #[inline]
     pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 
@@ -229,10 +230,10 @@ impl Drop for Queue {
     fn drop(&mut self) {
         // walk from head to ensure we clean up all batches
         // (there may be batches between head and oldest that haven't been reclaimed)
-        let mut current = self.head.load(Ordering::Acquire);
+        let mut current = self.head.load(Ordering::Relaxed);
         while !current.is_null() {
             let batch = unsafe { Box::from_raw(current) };
-            current = batch.next.load(Ordering::Acquire);
+            current = batch.next.load(Ordering::Relaxed);
         }
     }
 }
