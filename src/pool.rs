@@ -117,6 +117,12 @@ impl ZeroPool {
     }
 }
 
+impl Default for ZeroPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Drop for ZeroPool {
     fn drop(&mut self) {
         self.queue.shutdown();
