@@ -2,7 +2,7 @@ use std::{
     hint::black_box,
     time::{Duration, Instant},
 };
-use zero_pool::{global_pool, ZeroPool, zp_define_task_fn, zp_write};
+use zero_pool::{ZeroPool, global_pool, zp_define_task_fn, zp_write};
 
 // Define task parameter structures
 struct SimpleTask {

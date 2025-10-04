@@ -20,7 +20,7 @@ Since the library uses raw pointers, you must ensure parameter structs remain va
 
 #### Notes
 - TaskFuture uses a small Mutex + Condvar to efficiently block waiting threads. Core pool operations remain lock-free.
-- Zero-Pool supports both explicit thread pool creation (`ZeroPool::new`, `ZeroPool::with_workers`) and a lazily initialized global instance (`zero_pool::global_pool`).
+- Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
 
 ## Benchmarks
 ```rust
