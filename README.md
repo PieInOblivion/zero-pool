@@ -18,7 +18,9 @@ Using a result-via-parameters pattern means workers place results into caller pr
 
 Since the library uses raw pointers, you must ensure parameter structs remain valid until `TaskFuture::wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe methods like `submit_task` and `submit_batch_uniform` for convenient usage.
 
-*Note: TaskFuture uses a small Mutex + Condvar to efficiently block waiting threads. Core pool operations remain lock-free.*
+#### Notes
+- TaskFuture uses a small Mutex + Condvar to efficiently block waiting threads. Core pool operations remain lock-free.
+- Zero-Pool supports both explicit thread pool creation (`ZeroPool::new`, `ZeroPool::with_workers`) and a lazily initialized global instance (`zero_pool::global_pool`).
 
 ## Benchmarks
 ```rust
@@ -145,6 +147,35 @@ future2.wait();
 
 println!("Single: {}", single_result);
 println!("Batch completed: {} tasks", batch_results.len());
+```
+
+### Using the Global Pool
+
+If you prefer to share a single pool across your entire application, call the
+global accessor. The pool is created on first use with the default worker
+count and lives for the duration of the process.
+
+```rust
+use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
+
+struct ExampleParams {
+    work: usize,
+    result: *mut u64,
+}
+
+zp_define_task_fn!(example_task, ExampleParams, |params| {
+    let mut sum = 0u64;
+    for i in 0..params.work {
+        sum = sum.wrapping_add(i as u64);
+    }
+    zp_write!(params.result, sum);
+});
+
+let pool = global_pool();
+let mut result = 0u64;
+let params = ExampleParams { work: 1_000, result: &mut result };
+
+pool.submit_task(example_task, &params).wait();
 ```
 
 ### `zp_define_task_fn!`

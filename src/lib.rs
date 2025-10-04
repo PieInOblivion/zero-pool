@@ -41,9 +41,21 @@ mod task_batch;
 mod task_future;
 mod worker;
 
+use std::sync::OnceLock;
+
 pub use pool::ZeroPool;
 
 pub use task_future::TaskFuture;
+
+static GLOBAL_ZP: OnceLock<ZeroPool> = OnceLock::new();
+
+/// Returns a reference to the lazily initialized global pool.
+///
+/// This is the simplest way to share a single pool across your application.
+/// The pool is created on first use using [`ZeroPool::new`].
+pub fn global_pool() -> &'static ZeroPool {
+    GLOBAL_ZP.get_or_init(ZeroPool::new)
+}
 
 /// Function pointer type for task execution
 ///

@@ -1,5 +1,10 @@
 use crate::{TaskFnPointer, queue::Queue, task_future::TaskFuture, worker::spawn_worker};
-use std::{sync::Arc, sync::Barrier, thread::JoinHandle};
+use std::{
+    sync::{Arc, Barrier},
+    thread::JoinHandle,
+};
+
+unsafe impl Sync for ZeroPool {}
 
 pub struct ZeroPool {
     queue: Arc<Queue>,

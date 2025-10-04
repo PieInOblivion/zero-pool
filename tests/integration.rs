@@ -2,7 +2,7 @@ use std::{
     hint::black_box,
     time::{Duration, Instant},
 };
-use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
+use zero_pool::{global_pool, ZeroPool, zp_define_task_fn, zp_write};
 
 // Define task parameter structures
 struct SimpleTask {
@@ -55,6 +55,26 @@ fn test_basic_functionality() {
 
     assert_ne!(result, 0);
     println!("Basic test result: {}", result);
+}
+
+#[test]
+fn test_global_pool_usage() {
+    let pool = global_pool();
+    let mut result = 0u64;
+
+    let params = SimpleTask {
+        iterations: 1000,
+        result: &mut result,
+    };
+
+    let future = pool.submit_task(simple_cpu_task, &params);
+    future.wait();
+
+    assert_ne!(result, 0);
+    assert!(
+        std::ptr::eq(pool, global_pool()),
+        "Global pool should be a singleton"
+    );
 }
 
 #[test]
