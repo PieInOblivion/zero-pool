@@ -4,8 +4,6 @@ use std::{
     thread::JoinHandle,
 };
 
-unsafe impl Sync for ZeroPool {}
-
 pub struct ZeroPool {
     queue: Arc<Queue>,
     workers: Vec<JoinHandle<()>>,
