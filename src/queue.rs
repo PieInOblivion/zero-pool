@@ -68,18 +68,15 @@ impl Queue {
         future
     }
 
-    #[inline]
     pub fn update_epoch(&self, worker_id: usize) {
         let epoch = self.global_epoch.load(Ordering::Acquire) & EPOCH_MASK;
         self.local_epochs[worker_id].store(epoch, Ordering::Release);
     }
 
-    #[inline]
     pub fn exit_epoch(&self, worker_id: usize) {
         self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Release);
     }
 
-    #[inline]
     pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
         let mut current = self.head.load(Ordering::Acquire);
 

@@ -82,6 +82,7 @@ impl ZeroPool {
     /// future.wait();
     /// assert_eq!(result, 84);
     /// ```
+    #[inline]
     pub fn submit_task<T>(&self, task_fn: TaskFnPointer, params: &T) -> TaskFuture {
         let slice = std::slice::from_ref(params);
         self.queue.push_task_batch(task_fn, slice)
@@ -115,6 +116,7 @@ impl ZeroPool {
     /// assert_eq!(results[1], 2);
     /// assert_eq!(results[999], 1998);
     /// ```
+    #[inline]
     pub fn submit_batch_uniform<T>(&self, task_fn: TaskFnPointer, params_vec: &[T]) -> TaskFuture {
         self.queue.push_task_batch(task_fn, params_vec)
     }

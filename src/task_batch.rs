@@ -27,7 +27,6 @@ impl TaskBatch {
         }
     }
 
-    #[inline]
     pub fn claim_next_param(&self) -> Option<TaskParamPointer> {
         let item_index = self.next_item.fetch_add(1, Ordering::Relaxed);
         if item_index >= self.params_len {

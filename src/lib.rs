@@ -53,6 +53,7 @@ static GLOBAL_ZP: OnceLock<ZeroPool> = OnceLock::new();
 ///
 /// This is the simplest way to share a single pool across your application.
 /// The pool is created on first use using [`ZeroPool::new`].
+#[inline]
 pub fn global_pool() -> &'static ZeroPool {
     GLOBAL_ZP.get_or_init(ZeroPool::new)
 }
