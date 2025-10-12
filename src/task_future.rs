@@ -4,25 +4,34 @@ use std::time::Duration;
 
 use crate::padded_type::PaddedAtomicUsize;
 
+/// Inner state shared between all clones of a TaskFuture
+struct TaskFutureInner {
+    remaining: PaddedAtomicUsize,
+    lock: Mutex<()>,
+    cvar: Condvar,
+}
+
 /// A future that tracks completion of submitted tasks
 ///
 /// `TaskFuture` provides both blocking and non-blocking ways to wait for
 /// task completion, with efficient condition variable notification.
 /// Tasks can be checked for completion, waited on indefinitely, or
 /// waited on with a timeout.
+///
+/// `TaskFuture` is cheaply cloneable and can be shared across threads.
+/// You can drop the future immediately after submission - tasks will
+/// still complete as the task batch holds its own reference.
 #[derive(Clone)]
-pub struct TaskFuture {
-    remaining: Arc<PaddedAtomicUsize>,
-    state: Arc<(Mutex<()>, Condvar)>,
-}
+pub struct TaskFuture(Arc<TaskFutureInner>);
 
 impl TaskFuture {
     // create a new work future for the given number of tasks
     pub(crate) fn new(task_count: usize) -> Self {
-        TaskFuture {
-            remaining: Arc::new(PaddedAtomicUsize::new(task_count)),
-            state: Arc::new((Mutex::new(()), Condvar::new())),
-        }
+        TaskFuture(Arc::new(TaskFutureInner {
+            remaining: PaddedAtomicUsize::new(task_count),
+            lock: Mutex::new(()),
+            cvar: Condvar::new(),
+        }))
     }
 
     /// Check if all tasks are complete without blocking
@@ -30,7 +39,7 @@ impl TaskFuture {
     /// Returns `true` if all tasks have finished execution.
     /// This is a non-blocking operation using atomic loads.
     pub fn is_complete(&self) -> bool {
-        self.remaining.load(Ordering::Acquire) == 0
+        self.0.remaining.load(Ordering::Acquire) == 0
     }
 
     /// Wait for all tasks to complete
@@ -43,11 +52,10 @@ impl TaskFuture {
             return;
         }
 
-        let (lock, cvar) = &*self.state;
-        let mut guard = lock.lock().unwrap();
+        let mut guard = self.0.lock.lock().unwrap();
 
         while !self.is_complete() {
-            guard = cvar.wait(guard).unwrap();
+            guard = self.0.cvar.wait(guard).unwrap();
         }
     }
 
@@ -60,11 +68,10 @@ impl TaskFuture {
             return true;
         }
 
-        let (lock, cvar) = &*self.state;
-        let mut guard = lock.lock().unwrap();
+        let mut guard = self.0.lock.lock().unwrap();
 
         while !self.is_complete() {
-            let (new_guard, timeout_result) = cvar.wait_timeout(guard, timeout).unwrap();
+            let (new_guard, timeout_result) = self.0.cvar.wait_timeout(guard, timeout).unwrap();
             guard = new_guard;
             if timeout_result.timed_out() {
                 return self.is_complete();
@@ -75,15 +82,14 @@ impl TaskFuture {
 
     // completes multiple tasks, decrements counter and notifies if all done
     pub(crate) fn complete_many(&self, count: usize) -> bool {
-        let remaining_count = self.remaining.fetch_sub(count, Ordering::Release);
+        let remaining_count = self.0.remaining.fetch_sub(count, Ordering::Release);
 
         if remaining_count != count {
             return false;
         }
 
-        let (lock, cvar) = &*self.state;
-        let _guard = lock.lock().unwrap();
-        cvar.notify_all();
+        let _guard = self.0.lock.lock().unwrap();
+        self.0.cvar.notify_all();
         true
     }
 }
