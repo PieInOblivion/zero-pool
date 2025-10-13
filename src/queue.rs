@@ -3,6 +3,7 @@ use crate::padded_type::{PaddedAtomicPtr, PaddedAtomicU8, PaddedAtomicUsize};
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, task_future::TaskFuture};
 use std::cell::UnsafeCell;
+use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, Thread};
 
@@ -16,7 +17,7 @@ pub struct Queue {
     oldest: PaddedAtomicPtr<TaskBatch>,
     global_epoch: PaddedAtomicUsize,
     local_epochs: Box<[PaddedAtomicUsize]>,
-    threads: Box<[UnsafeCell<Option<Thread>>]>,
+    threads: Box<[UnsafeCell<MaybeUninit<Thread>>]>,
     shutdown: AtomicBool,
 }
 
@@ -36,7 +37,7 @@ impl Queue {
 
         for _ in 0..worker_count {
             epochs.push(PaddedAtomicUsize::new(NOT_IN_CRITICAL));
-            t.push(UnsafeCell::new(None));
+            t.push(UnsafeCell::new(MaybeUninit::uninit()));
         }
 
         Queue {
@@ -112,12 +113,10 @@ impl Queue {
         for i in 0..num_workers {
             if self.local_epochs[i].load(Ordering::Acquire) == NOT_IN_CRITICAL {
                 unsafe {
-                    if let Some(t) = &*self.threads[i].get() {
-                        t.unpark();
-                        count -= 1;
-                        if count == 0 {
-                            break;
-                        }
+                    (*self.threads[i].get()).assume_init_ref().unpark();
+                    count -= 1;
+                    if count == 0 {
+                        break;
                     }
                 }
             }
@@ -126,7 +125,7 @@ impl Queue {
 
     pub fn register_worker_thread(&self, worker_id: usize) {
         unsafe {
-            *self.threads[worker_id].get() = Some(thread::current());
+            (*self.threads[worker_id].get()).write(thread::current());
         }
     }
 
