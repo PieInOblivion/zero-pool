@@ -155,13 +155,12 @@ impl Queue {
         true
     }
 
-    pub fn reclaim(&self) {
+    pub fn should_reclaim(&self) -> bool {
         // throttle reclamation: only run every 256 completed batches
-        let counter = self.reclaim_counter.fetch_add(1, Ordering::Relaxed);
-        if counter != u8::MAX {
-            return;
-        }
+        self.reclaim_counter.fetch_add(1, Ordering::Relaxed) == u8::MAX
+    }
 
+    pub fn reclaim(&self) {
         let head = self.head.load(Ordering::Acquire);
         let mut current = self.oldest.load(Ordering::Acquire);
 

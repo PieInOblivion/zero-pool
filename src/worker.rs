@@ -35,7 +35,7 @@ pub fn spawn_worker(
                         completed += 1;
                     }
 
-                    if future.complete_many(completed) {
+                    if future.complete_many(completed) && queue.should_reclaim() {
                         queue.update_epoch(id);
                         queue.reclaim();
                     }
