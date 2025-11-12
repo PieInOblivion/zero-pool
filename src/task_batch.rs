@@ -6,7 +6,7 @@ use crate::{
 
 pub struct TaskBatch {
     next_item: PaddedAtomicUsize,
-    params_ptr: *const u8,
+    params_ptr: usize,
     params_len: usize,
     param_stride: usize,
     task_fn_ptr: TaskFnPointer,
@@ -18,7 +18,7 @@ impl TaskBatch {
     pub fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
         TaskBatch {
             next_item: PaddedAtomicUsize::new(0),
-            params_ptr: params.as_ptr() as *const u8,
+            params_ptr: params.as_ptr() as usize,
             params_len: params.len(),
             param_stride: std::mem::size_of::<T>(),
             task_fn_ptr,
@@ -32,10 +32,8 @@ impl TaskBatch {
         if item_index >= self.params_len {
             return None;
         }
-        unsafe {
-            let element_ptr = self.params_ptr.add(item_index * self.param_stride);
-            Some(element_ptr as TaskParamPointer)
-        }
+        let element_ptr = self.params_ptr + item_index * self.param_stride;
+        Some(element_ptr as TaskParamPointer)
     }
 
     pub fn has_unclaimed_tasks(&self) -> bool {
