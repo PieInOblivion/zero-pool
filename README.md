@@ -1,5 +1,5 @@
 # Zero-Pool: Consistent High-Performance Thread Pool
-*When microseconds matter and allocation is the enemy.*
+*When nanoseconds matter and overhead is the enemy.*
 
 This is an experimental thread pool implementation focused on exploring lock-free FIFO MPMC queue techniques. Consider this a performance playground rather than a production-ready library.
 
@@ -19,10 +19,10 @@ Using a result-via-parameters pattern means workers place results into caller pr
 Since the library uses raw pointers, you must ensure parameter structs remain valid until `TaskFuture::wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe methods like `submit_task` and `submit_batch_uniform` for convenient usage.
 
 #### Notes
-- TaskFuture uses a small Mutex + Condvar to efficiently block waiting threads. Core pool operations remain lock-free.
+- TaskFuture uses a Mutex + Condvar to efficiently block waiting threads. All other pool operations are lock-free.
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
 
-## Benchmarks
+## Benchmarks (AMD 5900X, Linux 6.17)
 ```rust
 test bench_heavy_compute_rayon             ... bench:   4,879,891.95 ns/iter (+/- 686,055.45)
 test bench_heavy_compute_zeropool          ... bench:   4,430,550.20 ns/iter (+/- 268,825.43)
