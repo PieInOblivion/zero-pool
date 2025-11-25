@@ -5,11 +5,7 @@ use std::{
 
 use crate::queue::Queue;
 
-pub fn spawn_worker(
-    id: usize,
-    queue: Arc<Queue>,
-    barrier: Arc<Barrier>,
-) -> JoinHandle<()> {
+pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {

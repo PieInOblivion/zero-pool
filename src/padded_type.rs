@@ -1,27 +1,18 @@
-use std::{
-    ops::{Deref, DerefMut},
-    sync::atomic::{AtomicPtr, AtomicU8, AtomicUsize},
-};
+use std::ops::{Deref, DerefMut};
 
 // a generic type padded to fill one cache line, 64 bytes
-// this prevents false sharing when multiple threads access different atomics
 #[repr(align(64))]
-pub struct PaddedType<T, const PAD: usize> {
+pub struct PaddedType<T> {
     value: T,
-    // padding to fill the rest of the cache line
-    _pad: [u8; PAD],
 }
 
-impl<T, const PAD: usize> PaddedType<T, PAD> {
-    pub const fn new_padded(value: T) -> Self {
-        PaddedType {
-            value,
-            _pad: [0; PAD],
-        }
+impl<T> PaddedType<T> {
+    pub const fn new(value: T) -> Self {
+        PaddedType { value }
     }
 }
 
-impl<T, const PAD: usize> Deref for PaddedType<T, PAD> {
+impl<T> Deref for PaddedType<T> {
     type Target = T;
 
     #[inline]
@@ -30,31 +21,9 @@ impl<T, const PAD: usize> Deref for PaddedType<T, PAD> {
     }
 }
 
-impl<T, const PAD: usize> DerefMut for PaddedType<T, PAD> {
+impl<T> DerefMut for PaddedType<T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
-    }
-}
-
-pub type PaddedAtomicPtr<T> = PaddedType<AtomicPtr<T>, 56>;
-pub type PaddedAtomicUsize = PaddedType<AtomicUsize, 56>;
-pub type PaddedAtomicU8 = PaddedType<AtomicU8, 63>;
-
-impl<T> PaddedAtomicPtr<T> {
-    pub fn new(ptr: *mut T) -> Self {
-        Self::new_padded(AtomicPtr::new(ptr))
-    }
-}
-
-impl PaddedAtomicUsize {
-    pub fn new(value: usize) -> Self {
-        Self::new_padded(AtomicUsize::new(value))
-    }
-}
-
-impl PaddedAtomicU8 {
-    pub fn new(value: u8) -> Self {
-        Self::new_padded(AtomicU8::new(value))
     }
 }

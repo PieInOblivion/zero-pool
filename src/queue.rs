@@ -1,22 +1,22 @@
 use crate::TaskParamPointer;
-use crate::padded_type::{PaddedAtomicPtr, PaddedAtomicU8, PaddedAtomicUsize};
+use crate::padded_type::PaddedType;
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, task_future::TaskFuture};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering};
 use std::thread::{self, Thread};
 
 const NOT_IN_CRITICAL: usize = usize::MAX;
 const EPOCH_MASK: usize = usize::MAX >> 1; // use only lower bits for epoch
 
 pub struct Queue {
-    head: PaddedAtomicPtr<TaskBatch>,
-    tail: PaddedAtomicPtr<TaskBatch>,
-    reclaim_counter: PaddedAtomicU8,
-    oldest: PaddedAtomicPtr<TaskBatch>,
-    global_epoch: PaddedAtomicUsize,
-    local_epochs: Box<[PaddedAtomicUsize]>,
+    head: PaddedType<AtomicPtr<TaskBatch>>,
+    tail: PaddedType<AtomicPtr<TaskBatch>>,
+    reclaim_counter: PaddedType<AtomicU8>,
+    oldest: PaddedType<AtomicPtr<TaskBatch>>,
+    global_epoch: PaddedType<AtomicUsize>,
+    local_epochs: Box<[PaddedType<AtomicUsize>]>,
     threads: Box<[UnsafeCell<MaybeUninit<Thread>>]>,
     shutdown: AtomicBool,
 }
@@ -36,16 +36,16 @@ impl Queue {
         let mut t = Vec::with_capacity(worker_count);
 
         for _ in 0..worker_count {
-            epochs.push(PaddedAtomicUsize::new(NOT_IN_CRITICAL));
+            epochs.push(PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)));
             t.push(UnsafeCell::new(MaybeUninit::uninit()));
         }
 
         Queue {
-            head: PaddedAtomicPtr::new(anchor_node),
-            tail: PaddedAtomicPtr::new(anchor_node),
-            reclaim_counter: PaddedAtomicU8::new(0),
-            oldest: PaddedAtomicPtr::new(anchor_node),
-            global_epoch: PaddedAtomicUsize::new(0),
+            head: PaddedType::new(AtomicPtr::new(anchor_node)),
+            tail: PaddedType::new(AtomicPtr::new(anchor_node)),
+            reclaim_counter: PaddedType::new(AtomicU8::new(0)),
+            oldest: PaddedType::new(AtomicPtr::new(anchor_node)),
+            global_epoch: PaddedType::new(AtomicUsize::new(0)),
             local_epochs: epochs.into_boxed_slice(),
             threads: t.into_boxed_slice(),
             shutdown: AtomicBool::new(false),

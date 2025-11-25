@@ -1,11 +1,9 @@
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
-use crate::{
-    TaskFnPointer, TaskParamPointer, padded_type::PaddedAtomicUsize, task_future::TaskFuture,
-};
+use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType, task_future::TaskFuture};
 
 pub struct TaskBatch {
-    next_item: PaddedAtomicUsize,
+    next_item: PaddedType<AtomicUsize>,
     params_ptr: usize,
     params_len: usize,
     param_stride: usize,
@@ -17,7 +15,7 @@ pub struct TaskBatch {
 impl TaskBatch {
     pub fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
         TaskBatch {
-            next_item: PaddedAtomicUsize::new(0),
+            next_item: PaddedType::new(AtomicUsize::new(0)),
             params_ptr: params.as_ptr() as usize,
             params_len: params.len(),
             param_stride: std::mem::size_of::<T>(),
