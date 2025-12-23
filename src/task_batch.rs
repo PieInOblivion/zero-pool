@@ -4,7 +4,8 @@ use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType, task_futur
 
 pub struct TaskBatch {
     next_item: PaddedType<AtomicUsize>,
-    params_ptr: usize,
+    // pointer arithmetic instead of usize address math to preserve pointer provenance
+    params_ptr: *const u8,
     params_len: usize,
     param_stride: usize,
     task_fn_ptr: TaskFnPointer,
@@ -16,7 +17,7 @@ impl TaskBatch {
     pub fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
         TaskBatch {
             next_item: PaddedType::new(AtomicUsize::new(0)),
-            params_ptr: params.as_ptr() as usize,
+            params_ptr: params.as_ptr() as *const u8,
             params_len: params.len(),
             param_stride: std::mem::size_of::<T>(),
             task_fn_ptr,
@@ -30,8 +31,10 @@ impl TaskBatch {
         if item_index >= self.params_len {
             return None;
         }
-        let element_ptr = self.params_ptr + item_index * self.param_stride;
-        Some(element_ptr as TaskParamPointer)
+        unsafe {
+            let element_ptr = self.params_ptr.add(item_index * self.param_stride);
+            Some(element_ptr as TaskParamPointer)
+        }
     }
 
     pub fn has_unclaimed_tasks(&self) -> bool {
