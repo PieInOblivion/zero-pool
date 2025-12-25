@@ -151,9 +151,7 @@ println!("Batch completed: {} tasks", batch_results.len());
 
 ### Using the Global Pool
 
-If you prefer to share a single pool across your entire application, call the
-global accessor. The pool is created on first use with the default worker
-count and lives for the duration of the process.
+If you prefer to share a single pool across your entire application, call the global accessor. The pool is created on first use and lives for the duration of the process.
 
 ```rust
 use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
