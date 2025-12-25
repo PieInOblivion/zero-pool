@@ -1,7 +1,8 @@
 use crate::{TaskFnPointer, queue::Queue, task_future::TaskFuture, worker::spawn_worker};
 use std::{
+    num::NonZeroUsize,
     sync::{Arc, Barrier},
-    thread::JoinHandle,
+    thread::{self, JoinHandle},
 };
 
 pub struct ZeroPool {
@@ -23,9 +24,7 @@ impl ZeroPool {
     /// let pool = ZeroPool::new();
     /// ```
     pub fn new() -> Self {
-        let worker_count = std::thread::available_parallelism()
-            .map(std::num::NonZeroUsize::get)
-            .unwrap_or(1);
+        let worker_count = thread::available_parallelism().unwrap_or(NonZeroUsize::MIN);
         Self::with_workers(worker_count)
     }
 
@@ -35,16 +34,15 @@ impl ZeroPool {
     /// for example when coordinating with other thread pools or
     /// when you know the optimal count for your specific workload.
     ///
-    /// # Panics
-    ///
-    /// Panics if `worker_count` is 0.
+    /// # Examples
     ///
     /// ```rust
+    /// use std::num::NonZeroUsize;
     /// use zero_pool::ZeroPool;
-    /// let pool = ZeroPool::with_workers(4);
+    /// let pool = ZeroPool::with_workers(NonZeroUsize::new(4).unwrap());
     /// ```
-    pub fn with_workers(worker_count: usize) -> Self {
-        assert!(worker_count > 0, "Must have at least one worker");
+    pub fn with_workers(worker_count: NonZeroUsize) -> Self {
+        let worker_count = worker_count.get();
 
         let queue = Arc::new(Queue::new(worker_count));
 

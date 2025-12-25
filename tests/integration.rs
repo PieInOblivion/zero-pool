@@ -1,5 +1,6 @@
 use std::{
     hint::black_box,
+    num::NonZeroUsize,
     time::{Duration, Instant},
 };
 use zero_pool::{ZeroPool, global_pool, zp_define_task_fn, zp_write};
@@ -122,7 +123,7 @@ fn test_empty_batch_submission() {
 #[test]
 fn test_single_worker_behavior() {
     // Important to test single-threaded execution path
-    let pool = ZeroPool::with_workers(1);
+    let pool = ZeroPool::with_workers(NonZeroUsize::MIN);
 
     println!("Testing single worker pool behavior...");
 
@@ -156,7 +157,7 @@ fn test_different_worker_counts() {
     for worker_count in [1, 2, 4, 8] {
         println!("Testing with {} workers", worker_count);
 
-        let pool = ZeroPool::with_workers(worker_count);
+        let pool = ZeroPool::with_workers(NonZeroUsize::new(worker_count).unwrap());
         let task_count = worker_count * 10;
         let mut results = vec![0u64; task_count];
 
@@ -388,7 +389,7 @@ fn test_memory_pressure() {
 fn test_complex_workload_scaling() {
     // Test how complex tasks scale with worker count
     for workers in [1, 2, 4] {
-        let pool = ZeroPool::with_workers(workers);
+        let pool = ZeroPool::with_workers(NonZeroUsize::new(workers).unwrap());
         let mut results = [0.0; 20];
 
         let params: Vec<_> = results
