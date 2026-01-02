@@ -68,16 +68,15 @@ impl TaskFuture {
             return true;
         }
 
-        let mut guard = self.0.lock.lock().unwrap();
+        let guard = self.0.lock.lock().unwrap();
 
-        while !self.is_complete() {
-            let (new_guard, timeout_result) = self.0.cvar.wait_timeout(guard, timeout).unwrap();
-            guard = new_guard;
-            if timeout_result.timed_out() {
-                return self.is_complete();
-            }
-        }
-        true
+        !self
+            .0
+            .cvar
+            .wait_timeout_while(guard, timeout, |_| !self.is_complete())
+            .unwrap()
+            .1
+            .timed_out()
     }
 
     // completes multiple tasks, decrements counter and notifies if all done
