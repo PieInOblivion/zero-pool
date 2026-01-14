@@ -71,7 +71,7 @@ impl Queue {
 
     pub fn update_epoch(&self, worker_id: usize) {
         let epoch = self.global_epoch.load(Ordering::Acquire) & EPOCH_MASK;
-        self.local_epochs[worker_id].store(epoch, Ordering::Release);
+        self.local_epochs[worker_id].store(epoch, Ordering::SeqCst);
     }
 
     pub fn exit_epoch(&self, worker_id: usize) {
