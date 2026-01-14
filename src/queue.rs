@@ -146,9 +146,9 @@ impl Queue {
             // handle wraparound: compute distance wrapping around
             let distance = reclaim_epoch.wrapping_sub(e) & EPOCH_MASK;
 
-            // if distance is small (< EPOCH_MASK/2), worker is still on old epoch
+            // if distance is small (<= EPOCH_MASK/2), worker is still on old epoch
             // this handles wraparound correctly
-            if distance < (EPOCH_MASK / 2) {
+            if distance <= (EPOCH_MASK / 2) {
                 return false;
             }
         }
