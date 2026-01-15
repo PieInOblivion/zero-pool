@@ -62,10 +62,10 @@ fn bench_indexed_computation_zeropool(b: &mut Bencher) {
 
         // create all task structs, each with its target pointer
         let mut tasks = Vec::with_capacity(TASK_COUNT);
-        for i in 0..TASK_COUNT {
+        for result in results.iter_mut().take(TASK_COUNT) {
             tasks.push(ComputeTask {
                 work_size: WORK_PER_TASK,
-                result: &mut results[i],
+                result,
             });
         }
 
@@ -110,10 +110,8 @@ fn bench_task_overhead_zeropool(b: &mut Bencher) {
         let mut results = vec![0u64; TASK_COUNT];
 
         let mut tasks = Vec::with_capacity(TASK_COUNT);
-        for i in 0..TASK_COUNT {
-            tasks.push(EmptyTask {
-                result: &mut results[i],
-            });
+        for result in results.iter_mut().take(TASK_COUNT) {
+            tasks.push(EmptyTask { result });
         }
 
         let batch = pool.submit_batch_uniform(empty_task_fn, &tasks);
