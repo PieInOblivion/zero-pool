@@ -18,10 +18,12 @@ Using a result-via-parameters pattern means workers place results into caller pr
 
 Because the library uses raw pointers, you must ensure parameter structs (including any pointers they contain) remain valid until task completion, and that your task functions are thread-safe.
 
+This approach allows complete freedom to optimise multi-threaded workloads any way you want.
+
 #### Notes
 - TaskFuture uses a Mutex + Condvar to block waiting threads and allow multiple threads to wait on the same task completion. All other pool operations are lock-free.
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
-- Task functions take a single parameter struct (e.g. `&MyTaskParams`), and the parameter name can be any valid identifier.
+- Task functions take a single parameter (e.g. `&MyTaskParams`), and the parameter name can be any valid identifier.
 
 ## Benchmarks (AMD 5900X, Linux 6.17)
 ```rust
