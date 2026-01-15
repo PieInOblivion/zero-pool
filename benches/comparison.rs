@@ -245,12 +245,16 @@ fn bench_individual_tasks_zeropool_empty(b: &mut Bencher) {
 
     b.iter(|| {
         let mut results = vec![0u64; INDIVIDUAL_TASK_COUNT];
+        let mut tasks = Vec::with_capacity(INDIVIDUAL_TASK_COUNT);
         let mut futures = Vec::with_capacity(INDIVIDUAL_TASK_COUNT);
 
-        // submit individual tasks
         for result in results.iter_mut() {
-            let task = IndividualTask { result };
-            let future = pool.submit_task(individual_empty_task_fn, &task);
+            tasks.push(IndividualTask { result });
+        }
+
+        // submit individual tasks
+        for task in tasks.iter() {
+            let future = pool.submit_task(individual_empty_task_fn, task);
             futures.push(future);
         }
 
@@ -265,15 +269,19 @@ fn bench_individual_tasks_zeropool_empty(b: &mut Bencher) {
 
 #[bench]
 fn bench_individual_tasks_rayon_empty(b: &mut Bencher) {
+    let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
+
     b.iter(|| {
         let mut results = vec![0u64; INDIVIDUAL_TASK_COUNT];
 
-        rayon::scope(|s| {
-            for result in results.iter_mut() {
-                s.spawn(move |_| {
-                    *result = 42u64;
-                });
-            }
+        pool.install(|| {
+            rayon::scope(|s| {
+                for result in results.iter_mut() {
+                    s.spawn(move |_| {
+                        *result = 42u64;
+                    });
+                }
+            });
         });
 
         black_box(results);
