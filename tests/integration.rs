@@ -3,7 +3,7 @@ use std::{
     num::NonZeroUsize,
     time::{Duration, Instant},
 };
-use zero_pool::{ZeroPool, global_pool, zp_define_task_fn, zp_write};
+use zero_pool::{ZeroPool, global_pool};
 
 // Define task parameter structures
 struct SimpleTask {
@@ -16,31 +16,37 @@ struct ComplexTask {
 }
 
 // Define task functions
-zp_define_task_fn!(simple_task_fn, SimpleTask, |params| {
+fn simple_task_fn(params: &SimpleTask) {
     let mut sum = 0u64;
     for i in 0..params.iterations {
         sum = sum.wrapping_add(i as u64 * 17);
     }
-    zp_write!(params.result, sum);
-});
+    unsafe {
+        *params.result = sum;
+    }
+}
 
-zp_define_task_fn!(simple_cpu_task, SimpleTask, |params| {
+fn simple_cpu_task(params: &SimpleTask) {
     let mut sum = 0u64;
     for i in 0..params.iterations {
         sum = sum.wrapping_add(i as u64 * 17 + 23);
     }
-    zp_write!(params.result, sum);
-});
+    unsafe {
+        *params.result = sum;
+    }
+}
 
-zp_define_task_fn!(complex_task_fn, ComplexTask, |params| {
+fn complex_task_fn(params: &ComplexTask) {
     let mut result = 0.0;
     for i in 0..params.size {
         for j in 0..params.size {
             result += ((i * j) as f64).sqrt().sin();
         }
     }
-    zp_write!(params.result, result);
-});
+    unsafe {
+        *params.result = result;
+    }
+}
 
 #[test]
 fn test_basic_functionality() {

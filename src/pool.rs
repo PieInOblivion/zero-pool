@@ -1,4 +1,4 @@
-use crate::{TaskFnPointer, queue::Queue, task_future::TaskFuture, worker::spawn_worker};
+use crate::{queue::Queue, task_future::TaskFuture, worker::spawn_worker};
 use std::{
     num::NonZeroUsize,
     sync::{Arc, Barrier},
@@ -65,13 +65,13 @@ impl ZeroPool {
     /// # Examples
     ///
     /// ```rust
-    /// use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
+    /// use zero_pool::ZeroPool;
     ///
     /// struct MyTaskParams { value: u64, result: *mut u64 }
     ///
-    /// zp_define_task_fn!(my_task_fn, MyTaskParams, |params| {
-    ///     zp_write!(params.result, params.value * 2);
-    /// });
+    /// fn my_task_fn(params: &MyTaskParams) {
+    ///     unsafe { *params.result = params.value * 2; }
+    /// }
     ///
     /// let pool = ZeroPool::new();
     /// let mut result = 0u64;
@@ -81,7 +81,7 @@ impl ZeroPool {
     /// assert_eq!(result, 84);
     /// ```
     #[inline]
-    pub fn submit_task<T>(&self, task_fn: TaskFnPointer, params: &T) -> TaskFuture {
+    pub fn submit_task<T>(&self, task_fn: fn(&T), params: &T) -> TaskFuture {
         let slice = std::slice::from_ref(params);
         self.queue.push_task_batch(task_fn, slice)
     }
@@ -95,13 +95,13 @@ impl ZeroPool {
     /// # Examples
     ///
     /// ```rust
-    /// use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
+    /// use zero_pool::ZeroPool;
     ///
     /// struct MyTaskParams { value: u64, result: *mut u64 }
     ///
-    /// zp_define_task_fn!(my_task_fn, MyTaskParams, |params| {
-    ///     zp_write!(params.result, params.value * 2);
-    /// });
+    /// fn my_task_fn(params: &MyTaskParams) {
+    ///     unsafe { *params.result = params.value * 2; }
+    /// }
     ///
     /// let pool = ZeroPool::new();
     /// let mut results = vec![0u64; 1000];
@@ -115,7 +115,7 @@ impl ZeroPool {
     /// assert_eq!(results[999], 1998);
     /// ```
     #[inline]
-    pub fn submit_batch_uniform<T>(&self, task_fn: TaskFnPointer, params_vec: &[T]) -> TaskFuture {
+    pub fn submit_batch_uniform<T>(&self, task_fn: fn(&T), params_vec: &[T]) -> TaskFuture {
         self.queue.push_task_batch(task_fn, params_vec)
     }
 }

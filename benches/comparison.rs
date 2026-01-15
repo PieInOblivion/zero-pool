@@ -5,7 +5,7 @@ use std::hint::black_box;
 use test::Bencher;
 
 use rayon::prelude::*;
-use zero_pool::{ZeroPool, zp_define_task_fn, zp_write_indexed};
+use zero_pool::ZeroPool;
 
 const TASK_COUNT: usize = 1000;
 const WORK_PER_TASK: usize = 100;
@@ -15,41 +15,42 @@ const INDIVIDUAL_TASK_COUNT: usize = 100;
 // task parameters: work amount, index to write to, and results vector
 struct ComputeTask {
     work_size: usize,
-    index: usize,
-    results: *mut Vec<u64>,
+    result: *mut u64,
 }
 
-// task function that does some computation and writes result to an index
-zp_define_task_fn!(compute_task_fn, ComputeTask, |params| {
+// task function that does some computation and writes result to pointer
+fn compute_task_fn(params: &ComputeTask) {
     let mut sum = 0u64;
 
     for i in 0..params.work_size {
         sum = sum.wrapping_add((i as u64).wrapping_mul(17).wrapping_add(23));
     }
 
-    // write result directly to the pre-allocated vector at the specified index
-    zp_write_indexed!(params.results, params.index, sum);
-});
-
-struct EmptyTask {
-    index: usize,
-    results: *mut Vec<u64>,
+    unsafe {
+        *params.result = sum;
+    }
 }
 
-zp_define_task_fn!(empty_task_fn, EmptyTask, |params| {
+struct EmptyTask {
+    result: *mut u64,
+}
+
+fn empty_task_fn(params: &EmptyTask) {
     // just write a constant to make sure it's not optimised out
-    zp_write_indexed!(params.results, params.index, 42u64);
-});
+    unsafe {
+        *params.result = 42u64;
+    }
+}
 
 struct IndividualTask {
     result: *mut u64,
 }
 
-zp_define_task_fn!(individual_empty_task_fn, IndividualTask, |params| {
+fn individual_empty_task_fn(params: &IndividualTask) {
     unsafe {
         *params.result = 42u64;
     }
-});
+}
 
 #[bench]
 fn bench_indexed_computation_zeropool(b: &mut Bencher) {
@@ -59,13 +60,12 @@ fn bench_indexed_computation_zeropool(b: &mut Bencher) {
         // allocate results vector
         let mut results = vec![0u64; TASK_COUNT];
 
-        // create all task structs, each with its target index
+        // create all task structs, each with its target pointer
         let mut tasks = Vec::with_capacity(TASK_COUNT);
         for i in 0..TASK_COUNT {
             tasks.push(ComputeTask {
                 work_size: WORK_PER_TASK,
-                index: i,
-                results: &mut results,
+                result: &mut results[i],
             });
         }
 
@@ -112,8 +112,7 @@ fn bench_task_overhead_zeropool(b: &mut Bencher) {
         let mut tasks = Vec::with_capacity(TASK_COUNT);
         for i in 0..TASK_COUNT {
             tasks.push(EmptyTask {
-                index: i,
-                results: &mut results,
+                result: &mut results[i],
             });
         }
 
@@ -138,12 +137,11 @@ fn bench_task_overhead_rayon(b: &mut Bencher) {
 
 struct HeavyComputeTask {
     seed: u64,
-    index: usize,
-    results: *mut Vec<u64>,
+    result: *mut u64,
 }
 
 // heavy compute task function with variable work based on seed
-zp_define_task_fn!(heavy_compute_task_fn, HeavyComputeTask, |params| {
+fn heavy_compute_task_fn(params: &HeavyComputeTask) {
     // use fixed work amount instead of variable
     let work_amount = 30000;
 
@@ -163,8 +161,10 @@ zp_define_task_fn!(heavy_compute_task_fn, HeavyComputeTask, |params| {
         }
     }
 
-    zp_write_indexed!(params.results, params.index, sum);
-});
+    unsafe {
+        *params.result = sum;
+    }
+}
 
 #[bench]
 fn bench_heavy_compute_zeropool(b: &mut Bencher) {
@@ -186,8 +186,7 @@ fn bench_heavy_compute_zeropool(b: &mut Bencher) {
         for (i, &seed) in seeds.iter().enumerate().take(TASK_COUNT) {
             tasks.push(HeavyComputeTask {
                 seed,
-                index: i,
-                results: &mut results,
+                result: &mut results[i],
             });
         }
 

@@ -18,13 +18,13 @@
 //! ## Example
 //!
 //! ```rust
-//! use zero_pool::{ZeroPool, zp_define_task_fn, zp_write};
+//! use zero_pool::ZeroPool;
 //!
 //! struct MyTaskParams { value: u64, result: *mut u64 }
 //!
-//! zp_define_task_fn!(my_task, MyTaskParams, |params| {
-//!     zp_write!(params.result, params.value * 2);
-//! });
+//! fn my_task(params: &MyTaskParams) {
+//!     unsafe { *params.result = params.value * 2; }
+//! }
 //!
 //! let pool = ZeroPool::new();
 //! let mut result = 0u64;
@@ -33,7 +33,6 @@
 //! assert_eq!(result, 84);
 //! ```
 
-mod macros;
 mod padded_type;
 mod pool;
 mod queue;
