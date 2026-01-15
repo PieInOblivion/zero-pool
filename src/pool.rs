@@ -56,7 +56,7 @@ impl ZeroPool {
         ZeroPool { queue, workers }
     }
 
-    /// Submit a single typed task with automatic pointer conversion
+    /// Submit a single typed task
     ///
     /// The parameter struct must remain valid until the future completes.
     /// This is the recommended method for submitting individual tasks.
@@ -85,7 +85,7 @@ impl ZeroPool {
         self.queue.push_task_batch(task_fn, slice)
     }
 
-    /// Submit a batch of uniform tasks with automatic pointer conversion
+    /// Submit a batch of uniform tasks
     ///
     /// All tasks in the batch must be the same type and use the same task function.
     /// This method handles the pointer conversion automatically and is the most
