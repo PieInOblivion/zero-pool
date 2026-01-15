@@ -1,6 +1,6 @@
 use crate::padded_type::PaddedType;
 use crate::task_batch::TaskBatch;
-use crate::{TaskFnPointer, TaskParamPointer, task_future::TaskFuture};
+use crate::{TaskParamPointer, task_future::TaskFuture};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering};
@@ -57,8 +57,8 @@ impl Queue {
         }
 
         let future = TaskFuture::new(params.len());
-        // Types match ABI: fn(&T) and fn(*const ()) are both function pointers taking a single pointer-sized argument.
-        let raw_fn: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
+
+        let raw_fn = unsafe { std::mem::transmute(task_fn) };
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(raw_fn, params, future.clone())));
 
         let prev_tail = self.tail.swap(new_batch, Ordering::Release);
