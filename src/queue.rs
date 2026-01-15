@@ -24,7 +24,7 @@ unsafe impl Sync for Queue {}
 
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
-        fn noop(_: *const ()) {}
+        fn noop(_: TaskParamPointer) {}
         let anchor_node = Box::into_raw(Box::new(TaskBatch::new::<u8>(
             noop,
             &[],
