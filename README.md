@@ -154,7 +154,7 @@ println!("Batch completed: {} tasks", batch_results.len());
 If you prefer to share a single pool across your entire application, call the global accessor. The pool is created on first use and lives for the duration of the process.
 
 ```rust
-use zero_pool::{global_pool};
+use zero_pool::global_pool;
 
 struct ExampleParams {
     work: usize,
