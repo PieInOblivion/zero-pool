@@ -64,10 +64,10 @@ pub fn global_pool() -> &'static ZeroPool {
 ///
 /// Tasks receive a raw pointer to their parameter struct and must
 /// cast it to the appropriate type for safe access.
-pub(crate) type TaskFnPointer = fn(*const ());
+pub(crate) type TaskFnPointer = fn(*const u8);
 
 /// Raw pointer to task parameter struct
 ///
 /// This is type-erased for uniform storage but must be cast back
 /// to the original parameter type within the task function.
-pub(crate) type TaskParamPointer = *const ();
+pub(crate) type TaskParamPointer = *const u8;

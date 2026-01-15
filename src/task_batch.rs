@@ -5,7 +5,7 @@ use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType, task_futur
 pub struct TaskBatch {
     next_item: PaddedType<AtomicUsize>,
     // pointer arithmetic instead of usize address math to preserve pointer provenance
-    params_ptr: *const u8,
+    params_ptr: TaskParamPointer,
     params_len: usize,
     param_stride: usize,
     task_fn_ptr: TaskFnPointer,
@@ -17,7 +17,7 @@ impl TaskBatch {
     pub fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
         TaskBatch {
             next_item: PaddedType::new(AtomicUsize::new(0)),
-            params_ptr: params.as_ptr() as *const u8,
+            params_ptr: params.as_ptr() as TaskParamPointer,
             params_len: params.len(),
             param_stride: std::mem::size_of::<T>(),
             task_fn_ptr,
