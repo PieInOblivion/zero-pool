@@ -58,7 +58,6 @@ impl ZeroPool {
 
     /// Submit a single typed task with automatic pointer conversion
     ///
-    /// This method provides type safety while maintaining performance.
     /// The parameter struct must remain valid until the future completes.
     /// This is the recommended method for submitting individual tasks.
     ///

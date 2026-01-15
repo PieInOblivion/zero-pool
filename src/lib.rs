@@ -12,8 +12,11 @@
 //! This library achieves high performance through raw pointer usage. Users must ensure:
 //! - Parameter structs remain valid until `TaskFuture::wait()` completes
 //! - Result pointers remain valid until task execution finishes  
+//! - Task functions take exactly one parameter (usually the task parameter struct)
 //! - Task functions are thread-safe and data-race free
 //! - No undefined behavior in unsafe task code
+//!
+//! This API is unsafe-by-contract and performs no runtime validation of these invariants.
 //!
 //! ## Example
 //!

@@ -9,14 +9,14 @@ This is an experimental thread pool implementation focused on exploring lock-fre
 - **Zero queue limit** - unbounded
 - **Zero channels** - no std/crossbeam channel overhead
 - **Zero virtual dispatch** - function pointer dispatch avoids vtable lookups
-- **Zero core spinning** - event based
+- **Zero core spinning** - all event-based
 - **Zero result transport cost** - tasks write directly to caller-provided memory
 - **Zero per worker queues** - single global queue structure = perfect workload balancing
 - **Zero external dependencies** - standard library only and stable rust
 
 Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
 
-Since the library uses raw pointers, you must ensure parameter structs remain valid until `TaskFuture::wait()` completes, result pointers remain valid until task completion, and that your task functions are thread-safe. The library provides type-safe methods like `submit_task` and `submit_batch_uniform` for convenient usage.
+Because the library uses raw pointers, you must ensure parameter structs (including any pointers they contain) remain valid until task completion, and that your task functions are thread-safe.
 
 #### Notes
 - TaskFuture uses a Mutex + Condvar to block waiting threads and allow multiple threads to wait on the same task completion. All other pool operations are lock-free.
