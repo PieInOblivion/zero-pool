@@ -14,9 +14,8 @@ struct TaskFutureInner {
 /// A future that tracks completion of submitted tasks
 ///
 /// `TaskFuture` provides both blocking and non-blocking ways to wait for
-/// task completion, with efficient condition variable notification.
-/// Tasks can be checked for completion, waited on indefinitely, or
-/// waited on with a timeout.
+/// task completion. Tasks can be checked for completion, waited on
+/// indefinitely, or waited on with a timeout.
 ///
 /// `TaskFuture` is cheaply cloneable and can be shared across threads.
 /// You can drop the future immediately after submission - tasks will
