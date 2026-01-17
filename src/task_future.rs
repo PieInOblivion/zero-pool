@@ -51,11 +51,13 @@ impl TaskFuture {
             return;
         }
 
-        let mut guard = self.0.lock.lock().unwrap();
+        let guard = self.0.lock.lock().unwrap();
 
-        while !self.is_complete() {
-            guard = self.0.cvar.wait(guard).unwrap();
-        }
+        let _guard = self
+            .0
+            .cvar
+            .wait_while(guard, |_| !self.is_complete())
+            .unwrap();
     }
 
     /// Wait for all tasks to complete with a timeout
