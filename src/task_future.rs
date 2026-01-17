@@ -43,9 +43,7 @@ impl TaskFuture {
 
     /// Wait for all tasks to complete
     ///
-    /// This method blocks the current thread until all tasks finish.
-    /// It uses efficient condition variable notification to minimize
-    /// CPU usage while waiting.
+    /// First checks completion with an atomic load; if incomplete, it locks the mutex.
     pub fn wait(self) {
         if self.is_complete() {
             return;
@@ -62,6 +60,7 @@ impl TaskFuture {
 
     /// Wait for all tasks to complete with a timeout
     ///
+    /// First checks completion with an atomic load; if incomplete, it locks the mutex.
     /// Returns `true` if all tasks completed within the timeout,
     /// `false` if the timeout was reached first.
     pub fn wait_timeout(self, timeout: Duration) -> bool {
