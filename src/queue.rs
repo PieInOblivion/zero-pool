@@ -72,6 +72,8 @@ impl Queue {
 
     pub fn update_epoch(&self, worker_id: usize) {
         let epoch = self.global_epoch.load(Ordering::Acquire) & EPOCH_MASK;
+        // SeqCst acts as a full barrier to publish epoch before touching queue nodes,
+        // preventing reclamation races on weak memory models
         self.local_epochs[worker_id].store(epoch, Ordering::SeqCst);
     }
 
