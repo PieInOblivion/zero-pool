@@ -21,7 +21,7 @@ impl TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
             params_ptr: params.as_ptr() as TaskParamPointer,
             param_stride,
-            params_total_bytes: param_stride * params.len(),
+            params_total_bytes: std::mem::size_of_val(params),
             task_fn_ptr,
             future,
             next: AtomicPtr::new(std::ptr::null_mut()),
