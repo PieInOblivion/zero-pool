@@ -17,7 +17,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
             loop {
                 queue.wait_for_signal();
 
-                while let Some((batch, first_param, future)) = {
+                while let Some((batch, first_param)) = {
                     queue.update_epoch(id);
                     queue.get_next_batch()
                 } {
@@ -31,7 +31,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
                         completed += 1;
                     }
 
-                    if future.complete_many(completed) && queue.should_reclaim() {
+                    if batch.future.complete_many(completed) && queue.should_reclaim() {
                         queue.update_epoch(id);
                         queue.reclaim();
                     }

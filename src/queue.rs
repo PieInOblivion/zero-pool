@@ -81,14 +81,14 @@ impl Queue {
         self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Release);
     }
 
-    pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer, &TaskFuture)> {
+    pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
             let batch = unsafe { &*current };
 
             if let Some(param) = batch.claim_next_param() {
-                return Some((batch, param, &batch.future));
+                return Some((batch, param));
             }
 
             let next = batch.next.load(Ordering::Acquire);
