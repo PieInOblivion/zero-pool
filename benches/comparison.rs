@@ -10,7 +10,7 @@ use zero_pool::ZeroPool;
 const TASK_COUNT: usize = 1000;
 const WORK_PER_TASK: usize = 100;
 
-const INDIVIDUAL_TASK_COUNT: usize = 100;
+const INDIVIDUAL_TASK_COUNT: usize = 1000;
 
 // task parameters: work amount, index to write to, and results vector
 struct ComputeTask {
