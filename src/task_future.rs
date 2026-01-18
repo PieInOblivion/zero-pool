@@ -2,11 +2,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use crate::padded_type::PaddedType;
-
 /// Inner state shared between all clones of a TaskFuture
 struct TaskFutureInner {
-    remaining: PaddedType<AtomicUsize>,
+    remaining: AtomicUsize,
     lock: Mutex<()>,
     cvar: Condvar,
 }
@@ -24,10 +22,12 @@ struct TaskFutureInner {
 pub struct TaskFuture(Arc<TaskFutureInner>);
 
 impl TaskFuture {
-    // create a new work future for the given number of tasks
+    // create a new work future for the given number of tasks.
+    // padding 'remaining' overall tests like a net negative for performance,
+    // this is however inconclusive
     pub(crate) fn new(task_count: usize) -> Self {
         TaskFuture(Arc::new(TaskFutureInner {
-            remaining: PaddedType::new(AtomicUsize::new(task_count)),
+            remaining: AtomicUsize::new(task_count),
             lock: Mutex::new(()),
             cvar: Condvar::new(),
         }))
