@@ -7,7 +7,7 @@ use std::{
 
 pub struct ZeroPool {
     queue: Arc<Queue>,
-    workers: Vec<JoinHandle<()>>,
+    workers: Box<[JoinHandle<()>]>,
 }
 
 impl ZeroPool {
@@ -47,7 +47,7 @@ impl ZeroPool {
         let queue = Arc::new(Queue::new(worker_count));
 
         let barrier = Arc::new(Barrier::new(worker_count + 1));
-        let workers: Vec<JoinHandle<()>> = (0..worker_count)
+        let workers = (0..worker_count)
             .map(|id| spawn_worker(id, queue.clone(), barrier.clone()))
             .collect();
 
