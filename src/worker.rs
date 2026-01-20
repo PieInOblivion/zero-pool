@@ -13,6 +13,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
             queue.register_worker_thread(id);
             // signal registration complete and wait for all workers + main
             barrier.wait();
+            drop(barrier);
 
             loop {
                 queue.wait_for_signal();
