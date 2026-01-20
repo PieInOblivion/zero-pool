@@ -32,13 +32,13 @@ impl Queue {
             TaskFuture::new(0),
         )));
 
-        let mut epochs = Vec::with_capacity(worker_count);
-        let mut t = Vec::with_capacity(worker_count);
+        let local_epochs: Box<[_]> = (0..worker_count)
+            .map(|_| PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)))
+            .collect();
 
-        for _ in 0..worker_count {
-            epochs.push(PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)));
-            t.push(UnsafeCell::new(MaybeUninit::uninit()));
-        }
+        let threads: Box<[_]> = (0..worker_count)
+            .map(|_| UnsafeCell::new(MaybeUninit::uninit()))
+            .collect();
 
         Queue {
             head: PaddedType::new(AtomicPtr::new(anchor_node)),
@@ -46,8 +46,8 @@ impl Queue {
             reclaim_counter: PaddedType::new(AtomicU8::new(0)),
             oldest: PaddedType::new(AtomicPtr::new(anchor_node)),
             global_epoch: PaddedType::new(AtomicUsize::new(0)),
-            local_epochs: epochs.into_boxed_slice(),
-            threads: t.into_boxed_slice(),
+            local_epochs,
+            threads,
             shutdown: AtomicBool::new(false),
         }
     }
