@@ -20,6 +20,7 @@ pub struct Queue {
     shutdown: AtomicBool,
 }
 
+// needed for 'threads'
 unsafe impl Sync for Queue {}
 
 impl Queue {
