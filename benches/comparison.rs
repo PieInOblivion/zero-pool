@@ -152,9 +152,9 @@ fn heavy_compute_task_fn(params: &HeavyComputeTask) {
         sum = sum.wrapping_add(x);
 
         // some branching to make it less predictable
-        if x % 3 == 0 {
+        if x.is_multiple_of(3) {
             sum = sum.wrapping_mul(17);
-        } else if x % 7 == 0 {
+        } else if x.is_multiple_of(7) {
             sum = sum.wrapping_add(x >> 8);
         }
     }
@@ -223,9 +223,9 @@ fn bench_heavy_compute_rayon(b: &mut Bencher) {
                         x = x.wrapping_mul(1664525).wrapping_add(1013904223);
                         sum = sum.wrapping_add(x);
 
-                        if x % 3 == 0 {
+                        if x.is_multiple_of(3) {
                             sum = sum.wrapping_mul(17);
-                        } else if x % 7 == 0 {
+                        } else if x.is_multiple_of(7) {
                             sum = sum.wrapping_add(x >> 8);
                         }
                     }
