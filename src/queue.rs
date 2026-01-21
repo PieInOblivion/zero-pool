@@ -72,7 +72,7 @@ impl Queue {
     }
 
     pub fn update_epoch(&self, worker_id: usize) {
-        let epoch = self.global_epoch.load(Ordering::Acquire) & EPOCH_MASK;
+        let epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
         if self.local_epochs[worker_id].load(Ordering::Relaxed) != epoch {
             // SeqCst acts as a full barrier to publish epoch before touching queue nodes,
@@ -178,7 +178,7 @@ impl Queue {
         }
 
         // advance global epoch once for this reclamation cycle and mask it
-        let reclaim_epoch = self.global_epoch.fetch_add(1, Ordering::Release) & EPOCH_MASK;
+        let reclaim_epoch = self.global_epoch.fetch_add(1, Ordering::Relaxed) & EPOCH_MASK;
 
         // check if safe to reclaim anything
         if !self.can_reclaim(reclaim_epoch) {
