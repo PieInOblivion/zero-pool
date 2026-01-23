@@ -15,12 +15,10 @@ pub struct TaskBatch {
 
 impl TaskBatch {
     pub fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
-        let param_stride = std::mem::size_of::<T>();
-
         TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
             params_ptr: params.as_ptr() as TaskParamPointer,
-            param_stride,
+            param_stride: std::mem::size_of::<T>(),
             params_total_bytes: std::mem::size_of_val(params),
             task_fn_ptr,
             future,
