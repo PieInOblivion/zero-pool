@@ -225,7 +225,7 @@ impl Queue {
     }
 
     pub fn is_shutdown(&self) -> bool {
-        self.shutdown.load(Ordering::Acquire)
+        self.shutdown.load(Ordering::SeqCst)
     }
 
     pub fn has_tasks(&self) -> bool {
@@ -234,8 +234,11 @@ impl Queue {
     }
 
     pub fn shutdown(&self) {
-        self.shutdown.store(true, Ordering::Release);
-        self.notify(usize::MAX);
+        self.shutdown.store(true, Ordering::SeqCst);
+
+        self.threads.iter().for_each(|t| unsafe {
+            (*t.get()).assume_init_ref().unpark();
+        });
     }
 }
 
