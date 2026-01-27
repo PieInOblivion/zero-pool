@@ -129,6 +129,8 @@ impl Queue {
         let num_workers = self.threads.len();
         count = count.min(num_workers);
 
+        // the added contention of a 'start_from' shared atomic tends to be slower
+        // than iterating over the padded atomics array, even if its from the start every time
         for i in 0..num_workers {
             if self.local_epochs[i].load(Ordering::Acquire) == NOT_IN_CRITICAL {
                 unsafe {
