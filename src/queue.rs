@@ -13,8 +13,9 @@ pub struct Queue {
     head: PaddedType<AtomicPtr<TaskBatch>>,
     tail: PaddedType<AtomicPtr<TaskBatch>>,
     reclaim_counter: PaddedType<AtomicU8>,
-    oldest: PaddedType<AtomicPtr<TaskBatch>>,
     global_epoch: PaddedType<AtomicUsize>,
+    oldest: PaddedType<AtomicPtr<TaskBatch>>,
+    reclaim_lock: PaddedType<AtomicBool>,
     local_epochs: Box<[PaddedType<AtomicUsize>]>,
     threads: Box<[UnsafeCell<MaybeUninit<Thread>>]>,
     shutdown: AtomicBool,
@@ -44,8 +45,9 @@ impl Queue {
             head: PaddedType::new(AtomicPtr::new(anchor_node)),
             tail: PaddedType::new(AtomicPtr::new(anchor_node)),
             reclaim_counter: PaddedType::new(AtomicU8::new(0)),
-            oldest: PaddedType::new(AtomicPtr::new(anchor_node)),
             global_epoch: PaddedType::new(AtomicUsize::new(0)),
+            oldest: PaddedType::new(AtomicPtr::new(anchor_node)),
+            reclaim_lock: PaddedType::new(AtomicBool::new(false)),
             local_epochs,
             threads,
             shutdown: AtomicBool::new(false),
@@ -107,7 +109,15 @@ impl Queue {
                 Ordering::Release,
                 Ordering::Relaxed,
             ) {
-                Ok(_) => current = next,
+                Ok(_) => {
+                    unsafe {
+                        (*current).epoch.store(
+                            self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK,
+                            Ordering::Release,
+                        );
+                    }
+                    current = next;
+                }
                 Err(new_head) => current = new_head,
             }
         }
@@ -143,69 +153,67 @@ impl Queue {
         }
     }
 
-    fn can_reclaim(&self, reclaim_epoch: usize) -> bool {
-        for local_epoch in self.local_epochs.iter() {
-            let e = local_epoch.load(Ordering::Acquire);
-            if e == NOT_IN_CRITICAL {
-                continue;
-            }
-
-            // handle wraparound: compute distance wrapping around
-            let distance = reclaim_epoch.wrapping_sub(e) & EPOCH_MASK;
-
-            // if distance is small (<= EPOCH_MASK/2), worker is still on old epoch
-            // this handles wraparound correctly
-            if distance <= (EPOCH_MASK / 2) {
-                return false;
-            }
-        }
-        true
-    }
-
     pub fn should_reclaim(&self) -> bool {
         // throttle reclamation: only run every 256 completed batches
         self.reclaim_counter.fetch_add(1, Ordering::Relaxed) == u8::MAX
     }
 
     pub fn reclaim(&self) {
-        let head = self.head.load(Ordering::Acquire);
-        let mut current = self.oldest.load(Ordering::Acquire);
-
-        // quick check: is there anything to reclaim?
-        let mut next = unsafe { (*current).next.load(Ordering::Acquire) };
-        if next.is_null() || next == head {
+        if self
+            .reclaim_lock
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
             return;
         }
 
         // advance global epoch once for this reclamation cycle and mask it
-        let reclaim_epoch = self.global_epoch.fetch_add(1, Ordering::Relaxed) & EPOCH_MASK;
+        // we do this while holding the lock, so we establish a clear reclamation point
+        let global_epoch = (self.global_epoch.fetch_add(1, Ordering::Relaxed) + 1) & EPOCH_MASK;
 
-        // check if safe to reclaim anything
-        if !self.can_reclaim(reclaim_epoch) {
-            return;
-        }
-
-        // now do the actual reclamation
-        while !next.is_null() && next != head {
-            // try to advance oldest pointer
-            match self.oldest.compare_exchange_weak(
-                current,
-                next,
-                Ordering::Release,
-                Ordering::Acquire,
-            ) {
-                Ok(_) => {
-                    // we own current, safe to free
-                    unsafe { drop(Box::from_raw(current)) };
-                    current = next;
-                    next = unsafe { (*current).next.load(Ordering::Acquire) };
-                }
-                Err(new_oldest) => {
-                    current = new_oldest;
-                    next = unsafe { (*current).next.load(Ordering::Acquire) };
+        // scan workers to find the oldest active epoch
+        let mut max_backwards_dist = 0;
+        for local_epoch in self.local_epochs.iter() {
+            let e = local_epoch.load(Ordering::Acquire);
+            if e != NOT_IN_CRITICAL {
+                let dist = global_epoch.wrapping_sub(e) & EPOCH_MASK;
+                if dist > max_backwards_dist {
+                    max_backwards_dist = dist;
                 }
             }
         }
+
+        let head = self.head.load(Ordering::Relaxed);
+        let mut current = self.oldest.load(Ordering::Relaxed);
+
+        // RECLAMATION LOOP
+        loop {
+            // check if there is a next node
+            // we are safe to read (*current).next because we hold the lock
+            let next = unsafe { (*current).next.load(Ordering::Acquire) };
+            if next.is_null() || next == head {
+                break;
+            }
+
+            // check if next node is safe to reclaim using our cached thresholds
+            let next_epoch = unsafe { (*next).epoch.load(Ordering::Acquire) };
+            let dist_next = global_epoch.wrapping_sub(next_epoch) & EPOCH_MASK;
+
+            if dist_next <= max_backwards_dist {
+                // not safe to reclaim yet
+                break;
+            }
+
+            // safe to reclaim, update oldest to next
+            self.oldest.store(next, Ordering::Relaxed);
+
+            // free the memory
+            unsafe { drop(Box::from_raw(current)) };
+
+            current = next;
+        }
+
+        self.reclaim_lock.store(false, Ordering::Release);
     }
 
     pub fn is_shutdown(&self) -> bool {
