@@ -24,9 +24,8 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
                     queue.update_epoch(id, &mut cached_local_epoch);
                     queue.get_next_batch()
                 } {
-                    let (params_ptr, param_stride, params_total_bytes) =
-                        batch.get_param_run_values();
-                    let task_fn = batch.task_fn();
+                    let (params_ptr, param_stride, params_total_bytes, task_fn) =
+                        batch.get_run_values();
 
                     let mut completed = 1;
                     task_fn(first_param);

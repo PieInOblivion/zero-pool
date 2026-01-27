@@ -62,11 +62,12 @@ impl TaskBatch {
         self.next_byte_offset.load(Ordering::Relaxed) < self.params_total_bytes
     }
 
-    pub fn get_param_run_values(&self) -> (TaskParamPointer, usize, usize) {
-        (self.params_ptr, self.param_stride, self.params_total_bytes)
-    }
-
-    pub fn task_fn(&self) -> TaskFnPointer {
-        self.task_fn_ptr
+    pub fn get_run_values(&self) -> (TaskParamPointer, usize, usize, TaskFnPointer) {
+        (
+            self.params_ptr,
+            self.param_stride,
+            self.params_total_bytes,
+            self.task_fn_ptr,
+        )
     }
 }
