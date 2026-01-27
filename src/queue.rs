@@ -64,7 +64,7 @@ impl Queue {
         let raw_fn: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(raw_fn, params, future.clone())));
 
-        let prev_tail = self.tail.swap(new_batch, Ordering::Release);
+        let prev_tail = self.tail.swap(new_batch, Ordering::SeqCst);
         unsafe {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
@@ -87,7 +87,7 @@ impl Queue {
     }
 
     pub fn exit_epoch(&self, worker_id: usize, cached_local_epoch: &mut usize) {
-        self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Release);
+        self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::SeqCst);
         *cached_local_epoch = NOT_IN_CRITICAL;
     }
 
@@ -134,7 +134,7 @@ impl Queue {
         // the added contention of a 'start_from' shared atomic tends to be slower
         // than iterating over the padded atomics array, even if its from the start every time
         for i in 0..num_workers {
-            if self.local_epochs[i].load(Ordering::Acquire) == NOT_IN_CRITICAL {
+            if self.local_epochs[i].load(Ordering::SeqCst) == NOT_IN_CRITICAL {
                 unsafe {
                     (*self.threads[i].get()).assume_init_ref().unpark();
                     count -= 1;
@@ -229,7 +229,7 @@ impl Queue {
     }
 
     pub fn has_tasks(&self) -> bool {
-        let tail = self.tail.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::SeqCst);
         unsafe { (&*tail).has_unclaimed_tasks() }
     }
 
