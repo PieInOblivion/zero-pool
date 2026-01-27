@@ -73,20 +73,20 @@ impl Queue {
         future
     }
 
-    pub fn update_epoch(&self, worker_id: usize, cached_epoch: &mut usize) {
+    pub fn update_epoch(&self, worker_id: usize, cached_local_epoch: &mut usize) {
         let epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
-        if *cached_epoch != epoch {
-            *cached_epoch = epoch;
+        if *cached_local_epoch != epoch {
+            *cached_local_epoch = epoch;
             // SeqCst acts as a full barrier to publish epoch before touching queue nodes,
             // preventing reclamation races on weak memory models
             self.local_epochs[worker_id].store(epoch, Ordering::SeqCst);
         }
     }
 
-    pub fn exit_epoch(&self, worker_id: usize, cached_epoch: &mut usize) {
+    pub fn exit_epoch(&self, worker_id: usize, cached_local_epoch: &mut usize) {
         self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Release);
-        *cached_epoch = NOT_IN_CRITICAL;
+        *cached_local_epoch = NOT_IN_CRITICAL;
     }
 
     pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer)> {
