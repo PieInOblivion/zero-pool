@@ -6,7 +6,7 @@ use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering};
 use std::thread::{self, Thread};
 
-const NOT_IN_CRITICAL: usize = usize::MAX;
+pub const NOT_IN_CRITICAL: usize = usize::MAX;
 const EPOCH_MASK: usize = usize::MAX >> 1; // use only lower bits for epoch
 
 pub struct Queue {
@@ -73,18 +73,20 @@ impl Queue {
         future
     }
 
-    pub fn update_epoch(&self, worker_id: usize) {
+    pub fn update_epoch(&self, worker_id: usize, cached_epoch: &mut usize) {
         let epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
-        if self.local_epochs[worker_id].load(Ordering::Relaxed) != epoch {
+        if *cached_epoch != epoch {
             // SeqCst acts as a full barrier to publish epoch before touching queue nodes,
             // preventing reclamation races on weak memory models
             self.local_epochs[worker_id].store(epoch, Ordering::SeqCst);
+            *cached_epoch = epoch;
         }
     }
 
-    pub fn exit_epoch(&self, worker_id: usize) {
+    pub fn exit_epoch(&self, worker_id: usize, cached_epoch: &mut usize) {
         self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Release);
+        *cached_epoch = NOT_IN_CRITICAL;
     }
 
     pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer)> {

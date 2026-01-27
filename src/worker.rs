@@ -3,7 +3,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::queue::Queue;
+use crate::queue::{NOT_IN_CRITICAL, Queue};
 
 pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> JoinHandle<()> {
     thread::Builder::new()
@@ -15,11 +15,13 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
             barrier.wait();
             drop(barrier);
 
+            let mut cached_epoch = NOT_IN_CRITICAL;
+
             loop {
                 queue.wait_for_signal();
 
                 while let Some((batch, first_param)) = {
-                    queue.update_epoch(id);
+                    queue.update_epoch(id, &mut cached_epoch);
                     queue.get_next_batch()
                 } {
                     let (params_ptr, param_stride, params_total_bytes) =
@@ -37,12 +39,12 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
                     }
 
                     if batch.future.complete_many(completed) && queue.should_reclaim() {
-                        queue.update_epoch(id);
+                        queue.update_epoch(id, &mut cached_epoch);
                         queue.reclaim();
                     }
                 }
 
-                queue.exit_epoch(id);
+                queue.exit_epoch(id, &mut cached_epoch);
 
                 if queue.is_shutdown() {
                     break;
