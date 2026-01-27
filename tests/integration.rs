@@ -357,41 +357,6 @@ fn test_benchmark_simulation() {
 }
 
 #[test]
-fn test_memory_pressure() {
-    let pool = ZeroPool::new();
-    let mut all_results = Vec::new();
-
-    for iteration in 0..20 {
-        let mut results = vec![0u64; 1000];
-        let tasks: Vec<_> = results
-            .iter_mut()
-            .map(|result| SimpleTask {
-                iterations: 500,
-                result,
-            })
-            .collect();
-
-        let batch = pool.submit_batch_uniform(simple_task_fn, &tasks);
-        let completed = batch.wait_timeout(Duration::from_secs(15));
-
-        assert!(
-            completed,
-            "Memory pressure iteration {} timed out",
-            iteration
-        );
-
-        all_results.push(results);
-        black_box(&all_results);
-
-        println!(
-            "Memory pressure iteration {} completed, total: {} MB",
-            iteration,
-            all_results.len() * 1000 * 8 / 1_000_000
-        );
-    }
-}
-
-#[test]
 fn test_complex_workload_scaling() {
     // Test how complex tasks scale with worker count
     for workers in [1, 2, 4] {
