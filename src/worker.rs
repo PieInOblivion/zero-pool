@@ -22,12 +22,16 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
                     queue.update_epoch(id);
                     queue.get_next_batch()
                 } {
+                    let (params_ptr, param_stride, params_total_bytes) =
+                        batch.get_param_run_values();
                     let task_fn = batch.task_fn();
 
                     let mut completed = 1;
                     task_fn(first_param);
 
-                    while let Some(param) = batch.claim_next_param() {
+                    while let Some(param) =
+                        batch.claim_next_param_local(params_ptr, param_stride, params_total_bytes)
+                    {
                         task_fn(param);
                         completed += 1;
                     }
