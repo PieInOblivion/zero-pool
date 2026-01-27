@@ -73,7 +73,7 @@ impl Queue {
         future
     }
 
-    pub fn update_epoch(&self, worker_id: usize, cached_local_epoch: &mut usize) {
+    pub fn update_epoch(&self, worker_id: usize, cached_local_epoch: &mut usize) -> usize {
         let epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
         if *cached_local_epoch != epoch {
@@ -82,6 +82,8 @@ impl Queue {
             // preventing reclamation races on weak memory models
             self.local_epochs[worker_id].store(epoch, Ordering::SeqCst);
         }
+
+        epoch
     }
 
     pub fn exit_epoch(&self, worker_id: usize, cached_local_epoch: &mut usize) {
@@ -89,7 +91,7 @@ impl Queue {
         *cached_local_epoch = NOT_IN_CRITICAL;
     }
 
-    pub fn get_next_batch(&self) -> Option<(&TaskBatch, TaskParamPointer)> {
+    pub fn get_next_batch(&self, global_epoch: usize) -> Option<(&TaskBatch, TaskParamPointer)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
@@ -105,6 +107,12 @@ impl Queue {
             }
 
             // try to advance head, but continue regardless
+            // we update epoch here to prevent a potential race condition
+            // where a node is reclaimed before its epoch is updated
+            unsafe {
+                (*current).epoch.store(global_epoch, Ordering::Release);
+            }
+
             match self.head.compare_exchange_weak(
                 current,
                 next,
@@ -112,12 +120,6 @@ impl Queue {
                 Ordering::Relaxed,
             ) {
                 Ok(_) => {
-                    unsafe {
-                        (*current).epoch.store(
-                            self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK,
-                            Ordering::Release,
-                        );
-                    }
                     current = next;
                 }
                 Err(new_head) => current = new_head,
@@ -164,7 +166,7 @@ impl Queue {
         self.reclaim_counter.fetch_add(1, Ordering::Relaxed) == u8::MAX
     }
 
-    pub fn reclaim(&self) {
+    pub fn reclaim(&self, global_epoch: usize) {
         if self
             .reclaim_lock
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -175,7 +177,7 @@ impl Queue {
 
         // advance global epoch once for this reclamation cycle and mask it
         // we do this while holding the lock, so we establish a clear reclamation point
-        let global_epoch = (self.global_epoch.fetch_add(1, Ordering::Relaxed) + 1) & EPOCH_MASK;
+        let global_epoch = (global_epoch + 1) & EPOCH_MASK;
 
         // scan workers to find the oldest active epoch
         let mut max_backwards_dist = 0;
