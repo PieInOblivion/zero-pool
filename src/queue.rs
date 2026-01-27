@@ -159,6 +159,8 @@ impl Queue {
 
     pub fn should_reclaim(&self) -> bool {
         // throttle reclamation: only run every 256 completed batches
+        // this keeps predictable memory usage on all machines,
+        // not scaling with core count
         self.reclaim_counter.fetch_add(1, Ordering::Relaxed) == u8::MAX
     }
 
