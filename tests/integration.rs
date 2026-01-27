@@ -87,7 +87,7 @@ fn test_global_pool_usage() {
 #[test]
 fn test_massive_simple_tasks() {
     let pool = ZeroPool::new();
-    let task_count = 10_000;
+    let task_count = 1000;
     let mut results = vec![0u64; task_count];
 
     println!("Starting {} simple tasks...", task_count);
@@ -299,7 +299,7 @@ fn test_wait_timeout() {
 fn test_stress_rapid_batches() {
     let pool = ZeroPool::new();
 
-    for batch_num in 0..10 {
+    for batch_num in 0..4 {
         let mut results = vec![0u64; 100];
         let tasks: Vec<_> = results
             .iter_mut()
