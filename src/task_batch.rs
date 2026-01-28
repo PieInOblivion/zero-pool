@@ -41,7 +41,7 @@ impl TaskBatch {
 
     // trying to keep TaskBatch within two cache lines is crucial for performance,
     // however now having two changing atomics in line two can create cache invalidation stalls,
-    // so having workers take a local version of param variables should help in most cases
+    // so having workers take a local version of param variables forces compiler register hoisting
     pub fn claim_next_param_local(
         &self,
         params_ptr: TaskParamPointer,
