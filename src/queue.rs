@@ -166,7 +166,7 @@ impl Queue {
         self.reclaim_counter.fetch_add(1, Ordering::Relaxed) == u8::MAX
     }
 
-    pub fn reclaim(&self, global_epoch: usize) {
+    pub fn reclaim(&self) {
         if self
             .reclaim_lock
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -177,7 +177,7 @@ impl Queue {
 
         // advance global epoch once for this reclamation cycle and mask it
         // we do this while holding the lock, so we establish a clear reclamation point
-        let global_epoch = (global_epoch + 1) & EPOCH_MASK;
+        let global_epoch = (self.global_epoch.fetch_add(1, Ordering::Relaxed) + 1) & EPOCH_MASK;
 
         // scan workers to find the oldest active epoch
         let mut max_backwards_dist = 0;
