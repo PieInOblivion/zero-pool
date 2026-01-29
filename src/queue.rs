@@ -182,7 +182,7 @@ impl Queue {
         // scan workers to find the oldest active epoch
         let mut max_backwards_dist = 0;
         for local_epoch in self.local_epochs.iter() {
-            let e = local_epoch.load(Ordering::Acquire);
+            let e = local_epoch.load(Ordering::Relaxed);
             if e != NOT_IN_CRITICAL {
                 let dist = global_epoch.wrapping_sub(e) & EPOCH_MASK;
                 if dist > max_backwards_dist {
