@@ -38,7 +38,6 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
                     }
 
                     if batch.future.complete_many(completed) && queue.should_reclaim() {
-                        let _ = queue.update_epoch(id, &mut cached_local_epoch);
                         queue.reclaim();
                     }
                 }
