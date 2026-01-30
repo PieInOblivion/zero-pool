@@ -73,25 +73,20 @@ impl Queue {
         future
     }
 
-    pub fn update_epoch(&self, worker_id: usize, cached_local_epoch: &mut usize) -> usize {
-        let epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
+    pub fn get_next_batch(
+        &self,
+        worker_id: usize,
+        cached_local_epoch: &mut usize,
+    ) -> Option<(&TaskBatch, TaskParamPointer)> {
+        let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
-        if *cached_local_epoch != epoch {
-            *cached_local_epoch = epoch;
+        if *cached_local_epoch != global_epoch {
+            *cached_local_epoch = global_epoch;
             // SeqCst acts as a full barrier to publish epoch before touching queue nodes,
             // preventing reclamation races on weak memory models
-            self.local_epochs[worker_id].store(epoch, Ordering::SeqCst);
+            self.local_epochs[worker_id].store(global_epoch, Ordering::SeqCst);
         }
 
-        epoch
-    }
-
-    pub fn exit_epoch(&self, worker_id: usize, cached_local_epoch: &mut usize) {
-        self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::SeqCst);
-        *cached_local_epoch = NOT_IN_CRITICAL;
-    }
-
-    pub fn get_next_batch(&self, global_epoch: usize) -> Option<(&TaskBatch, TaskParamPointer)> {
         let mut current = self.head.load(Ordering::Acquire);
 
         loop {
@@ -153,8 +148,21 @@ impl Queue {
     }
 
     // wait until work is available or shutdown
-    pub fn wait_for_signal(&self) {
-        while !self.has_tasks() && !self.is_shutdown() {
+    // returns true if work is available, false if shutdown
+    pub fn wait_for_work(&self, worker_id: usize, cached_local_epoch: &mut usize) -> bool {
+        loop {
+            if self.has_tasks() {
+                return true;
+            }
+            if self.is_shutdown() {
+                return false;
+            }
+
+            if *cached_local_epoch != NOT_IN_CRITICAL {
+                *cached_local_epoch = NOT_IN_CRITICAL;
+                self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::SeqCst);
+            }
+
             thread::park();
         }
     }

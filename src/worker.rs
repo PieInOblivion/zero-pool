@@ -18,12 +18,13 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
             let mut cached_local_epoch = NOT_IN_CRITICAL;
 
             loop {
-                queue.wait_for_signal();
+                if !queue.wait_for_work(id, &mut cached_local_epoch) {
+                    break;
+                }
 
-                while let Some((batch, first_param)) = {
-                    let global_epoch = queue.update_epoch(id, &mut cached_local_epoch);
-                    queue.get_next_batch(global_epoch)
-                } {
+                while let Some((batch, first_param)) =
+                    queue.get_next_batch(id, &mut cached_local_epoch)
+                {
                     let mut completed = 1;
                     (batch.task_fn_ptr)(first_param);
 
@@ -35,12 +36,6 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> Join
                     if batch.future.complete_many(completed) && queue.should_reclaim() {
                         queue.reclaim();
                     }
-                }
-
-                queue.exit_epoch(id, &mut cached_local_epoch);
-
-                if queue.is_shutdown() {
-                    break;
                 }
             }
         })
