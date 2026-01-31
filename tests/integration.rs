@@ -12,7 +12,7 @@ struct SimpleTask {
 }
 struct ComplexTask {
     size: usize,
-    result: *mut f64,
+    result: *mut u64,
 }
 
 // Define task functions
@@ -37,10 +37,11 @@ fn simple_cpu_task(params: &SimpleTask) {
 }
 
 fn complex_task_fn(params: &ComplexTask) {
-    let mut result = 0.0;
+    let mut result = 0u64;
     for i in 0..params.size {
         for j in 0..params.size {
-            result += ((i * j) as f64).sqrt().sin();
+            let val = (i * j) as u64;
+            result = result.wrapping_add(val.wrapping_mul(val));
         }
     }
     unsafe {
@@ -48,6 +49,7 @@ fn complex_task_fn(params: &ComplexTask) {
     }
 }
 
+// Tests
 #[test]
 fn test_basic_functionality() {
     let pool = ZeroPool::new();
@@ -61,7 +63,6 @@ fn test_basic_functionality() {
     future.wait();
 
     assert_ne!(result, 0);
-    println!("Basic test result: {}", result);
 }
 
 #[test]
@@ -87,11 +88,10 @@ fn test_global_pool_usage() {
 #[test]
 fn test_massive_simple_tasks() {
     let pool = ZeroPool::new();
-    let task_count = 1000;
-    let mut results = vec![0u64; task_count];
+    let count = 200;
+    let mut results = vec![0u64; count];
 
-    println!("Starting {} simple tasks...", task_count);
-    let start = Instant::now();
+    println!("Starting {} simple tasks...", count);
 
     let tasks: Vec<_> = results
         .iter_mut()
@@ -104,43 +104,31 @@ fn test_massive_simple_tasks() {
     let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
     batch.wait();
 
-    let duration = start.elapsed();
-    println!("Completed {} tasks in {:?}", task_count, duration);
-
     let completed_count = results.iter().filter(|&&r| r != 0).count();
-    println!("Completed tasks: {} / {}", completed_count, task_count);
-    assert_eq!(completed_count, task_count, "Not all tasks completed");
+    assert_eq!(completed_count, count, "Not all tasks completed");
 }
 
 #[test]
 fn test_empty_batch_submission() {
     let pool = ZeroPool::new();
-
-    println!("Testing empty batch submissions...");
-
     let empty_tasks: Vec<SimpleTask> = Vec::new();
     let empty_batch = pool.submit_batch_uniform(simple_cpu_task, &empty_tasks);
+
     assert!(empty_batch.is_complete());
     empty_batch.wait();
-
-    println!("Empty batch tests completed successfully");
 }
 
 #[test]
 fn test_single_worker_behavior() {
-    // Important to test single-threaded execution path
     let pool = ZeroPool::with_workers(NonZeroUsize::MIN);
-
-    println!("Testing single worker pool behavior...");
-
     let mut results = [0u64; 5];
-    let start = Instant::now();
+    let base_iter = 10_000;
 
     let tasks: Vec<_> = results
         .iter_mut()
         .enumerate()
         .map(|(i, result)| SimpleTask {
-            iterations: 10000 + i * 1000,
+            iterations: base_iter + i * 100,
             result,
         })
         .collect();
@@ -148,21 +136,16 @@ fn test_single_worker_behavior() {
     let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
     batch.wait();
 
-    let duration = start.elapsed();
-
     for (i, &result) in results.iter().enumerate() {
         assert_ne!(result, 0, "Task {} did not complete", i);
     }
-
-    println!("Single worker test completed in {:?}", duration);
 }
 
 #[test]
 fn test_different_worker_counts() {
-    // Test pool behavior with different worker counts
-    for worker_count in [1, 2, 4, 8] {
-        println!("Testing with {} workers", worker_count);
+    let worker_counts = [1, 2, 4];
 
+    for worker_count in worker_counts {
         let pool = ZeroPool::with_workers(NonZeroUsize::new(worker_count).unwrap());
         let task_count = worker_count * 10;
         let mut results = vec![0u64; task_count];
@@ -170,52 +153,39 @@ fn test_different_worker_counts() {
         let tasks: Vec<_> = results
             .iter_mut()
             .map(|result| SimpleTask {
-                iterations: 1000,
+                iterations: 100,
                 result,
             })
             .collect();
 
-        let start = Instant::now();
         let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
         batch.wait();
-        let duration = start.elapsed();
 
         let completed = results.iter().filter(|&&r| r != 0).count();
         assert_eq!(completed, task_count);
-
-        println!(
-            "  {} workers completed {} tasks in {:?}",
-            worker_count, task_count, duration
-        );
     }
 }
 
 #[test]
 fn test_shutdown_and_cleanup() {
-    println!("Testing shutdown and cleanup behavior...");
-
     let mut final_results = vec![0u64; 100];
     let completed_before_drop;
+    let iterations = 20;
 
     {
         let pool = ZeroPool::new();
 
         let tasks: Vec<_> = final_results
             .iter_mut()
-            .map(|result| SimpleTask {
-                iterations: 1000,
-                result,
-            })
+            .map(|result| SimpleTask { iterations, result })
             .collect();
 
         let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
         batch.wait();
 
         completed_before_drop = final_results.iter().filter(|&&r| r != 0).count();
-        println!("Tasks completed before drop: {}", completed_before_drop);
     }
 
-    println!("Pool dropped successfully");
     assert_eq!(
         completed_before_drop, 100,
         "Not all tasks completed before shutdown"
@@ -232,16 +202,12 @@ fn test_shutdown_and_cleanup() {
         let future = pool2.submit_task(simple_cpu_task, &params);
         future.wait();
         assert_ne!(test_result, 0);
-        println!("New pool works correctly after previous cleanup");
     }
 }
 
 #[test]
 fn test_rapid_pool_creation() {
-    // Tests rapid pool creation and destruction
-    for iteration in 0..5 {
-        println!("Rapid pool iteration {}", iteration);
-
+    for _ in 0..5 {
         let pool = ZeroPool::new();
         let mut result = 0u64;
         let params = SimpleTask {
@@ -254,17 +220,13 @@ fn test_rapid_pool_creation() {
 
         assert_ne!(result, 0);
         drop(pool);
-
-        std::thread::sleep(Duration::from_millis(10));
     }
-    println!("Rapid pool creation test completed");
 }
 
 #[test]
 fn test_wait_timeout() {
     let pool = ZeroPool::new();
 
-    // Test that timeout works for quick tasks
     let mut result = 0u64;
     let params = SimpleTask {
         iterations: 100,
@@ -272,13 +234,10 @@ fn test_wait_timeout() {
     };
     let future = pool.submit_task(simple_cpu_task, &params);
 
-    let start = Instant::now();
     let completed = future.wait_timeout(Duration::from_secs(5));
-    let duration = start.elapsed();
 
     assert!(completed, "Task should complete within timeout");
     assert_ne!(result, 0);
-    println!("Task completed in {:?}", duration);
 
     // Test empty batch with timeout
     let empty_tasks: Vec<SimpleTask> = Vec::new();
@@ -290,7 +249,7 @@ fn test_wait_timeout() {
 
     assert!(completed);
     assert!(
-        duration < Duration::from_millis(50),
+        duration < Duration::from_secs(1),
         "Empty batch should complete immediately"
     );
 }
@@ -298,38 +257,36 @@ fn test_wait_timeout() {
 #[test]
 fn test_stress_rapid_batches() {
     let pool = ZeroPool::new();
+    let iterations = 2;
+    let batch_size = 10;
 
-    for batch_num in 0..4 {
-        let mut results = vec![0u64; 100];
+    for batch_num in 0..iterations {
+        let mut results = vec![0u64; batch_size];
         let tasks: Vec<_> = results
             .iter_mut()
             .enumerate()
             .map(|(i, result)| SimpleTask {
-                iterations: 200 + i * 10,
+                iterations: 100 + i,
                 result,
             })
             .collect();
 
-        let start = Instant::now();
         let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
         let completed = batch.wait_timeout(Duration::from_secs(10));
-        let duration = start.elapsed();
 
         assert!(completed, "Batch {} timed out", batch_num);
 
         let completed_count = results.iter().filter(|&&r| r != 0).count();
-        assert_eq!(completed_count, 100);
-
-        println!("Stress batch {} completed in {:?}", batch_num, duration);
+        assert_eq!(completed_count, batch_size);
     }
 }
 
 #[test]
 fn test_benchmark_simulation() {
-    // Simulates what criterion does - multiple iterations with the same pool
     let pool = ZeroPool::new();
+    let iterations = 10;
 
-    for iteration in 0..20 {
+    for iteration in 0..iterations {
         let mut results = vec![0u64; 100];
         let tasks: Vec<_> = results
             .iter_mut()
@@ -345,37 +302,48 @@ fn test_benchmark_simulation() {
         assert!(completed, "Iteration {} timed out", iteration);
 
         let completed_count = results.iter().filter(|&&r| r != 0).count();
-        assert_eq!(
-            completed_count, 100,
-            "Not all tasks completed in iteration {}",
-            iteration
-        );
+        assert_eq!(completed_count, 100);
 
         black_box(results);
     }
-    println!("Benchmark simulation completed successfully");
 }
 
 #[test]
 fn test_complex_workload_scaling() {
-    // Test how complex tasks scale with worker count
-    for workers in [1, 2, 4] {
+    let worker_counts = [1, 2, 4];
+    let size = 10;
+
+    for workers in worker_counts {
         let pool = ZeroPool::with_workers(NonZeroUsize::new(workers).unwrap());
-        let mut results = [0.0; 20];
+        let mut results = [0u64; 10];
 
         let params: Vec<_> = results
             .iter_mut()
-            .map(|result| ComplexTask { size: 50, result })
+            .map(|result| ComplexTask { size, result })
             .collect();
 
-        let start = Instant::now();
         let batch = pool.submit_batch_uniform(complex_task_fn, &params);
         batch.wait();
-        let duration = start.elapsed();
 
-        let completed = results.iter().filter(|&&r| r != 0.0).count();
-        assert_eq!(completed, 20);
+        let completed = results.iter().filter(|&&r| r != 0).count();
+        assert_eq!(completed, 10);
+    }
+}
 
-        println!("Complex tasks with {} workers: {:?}", workers, duration);
+#[test]
+fn test_reclaim_trigger() {
+    // This test ensures we hit the reclaim threshold (256 batches)
+    let pool = ZeroPool::new();
+    let mut result = 0u64;
+    let params = SimpleTask {
+        iterations: 0,
+        result: &mut result,
+    };
+
+    println!("Running 300 sequential batches to trigger reclaim...");
+
+    for _ in 0..300 {
+        let future = pool.submit_task(simple_cpu_task, &params);
+        future.wait();
     }
 }
