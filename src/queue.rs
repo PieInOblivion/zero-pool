@@ -64,7 +64,7 @@ impl Queue {
         let raw_fn: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(raw_fn, params, future.clone())));
 
-        let prev_tail = self.tail.swap(new_batch, Ordering::SeqCst);
+        let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
         unsafe {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
@@ -161,6 +161,10 @@ impl Queue {
             if *cached_local_epoch != NOT_IN_CRITICAL {
                 *cached_local_epoch = NOT_IN_CRITICAL;
                 self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::SeqCst);
+
+                if self.has_tasks() {
+                    return true;
+                }
             }
 
             thread::park();
@@ -190,7 +194,7 @@ impl Queue {
         // scan workers to find the oldest active epoch
         let mut max_backwards_dist = 0;
         for local_epoch in self.local_epochs.iter() {
-            let e = local_epoch.load(Ordering::Relaxed);
+            let e = local_epoch.load(Ordering::SeqCst);
             if e != NOT_IN_CRITICAL {
                 let dist = global_epoch.wrapping_sub(e) & EPOCH_MASK;
                 if dist > max_backwards_dist {
@@ -233,16 +237,16 @@ impl Queue {
     }
 
     pub fn is_shutdown(&self) -> bool {
-        self.shutdown.load(Ordering::SeqCst)
+        self.shutdown.load(Ordering::Acquire)
     }
 
     pub fn has_tasks(&self) -> bool {
-        let tail = self.tail.load(Ordering::SeqCst);
+        let tail = self.tail.load(Ordering::Acquire);
         unsafe { (&*tail).has_unclaimed_tasks() }
     }
 
     pub fn shutdown(&self) {
-        self.shutdown.store(true, Ordering::SeqCst);
+        self.shutdown.store(true, Ordering::Release);
 
         self.threads.iter().for_each(|t| unsafe {
             (*t.get()).assume_init_ref().unpark();
