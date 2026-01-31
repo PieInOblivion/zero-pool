@@ -224,15 +224,13 @@ impl Queue {
                 break;
             }
 
-            // safe to reclaim, update oldest to next
-            self.oldest.store(next, Ordering::Relaxed);
-
-            // free the memory
+            // safe to reclaim
             unsafe { drop(Box::from_raw(current)) };
 
             current = next;
         }
 
+        self.oldest.store(current, Ordering::Relaxed);
         self.reclaim_lock.store(false, Ordering::Release);
     }
 
