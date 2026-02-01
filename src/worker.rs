@@ -1,19 +1,22 @@
 use std::{
-    sync::{Arc, Barrier},
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 
-use crate::queue::{NOT_IN_CRITICAL, Queue};
+use crate::{
+    queue::{NOT_IN_CRITICAL, Queue},
+    startup_latch::StartupLatch,
+};
 
-pub fn spawn_worker(id: usize, queue: Arc<Queue>, barrier: Arc<Barrier>) -> JoinHandle<()> {
+pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: Arc<StartupLatch>) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {
             // register this thread with the queue's waiter so it can be unparked by id
             queue.register_worker_thread(id);
             // signal registration complete and wait for all workers + main
-            barrier.wait();
-            drop(barrier);
+            latch.decrement();
+            drop(latch);
 
             let mut cached_local_epoch = NOT_IN_CRITICAL;
 

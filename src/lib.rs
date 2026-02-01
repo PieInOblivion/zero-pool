@@ -39,6 +39,7 @@
 mod padded_type;
 mod pool;
 mod queue;
+mod startup_latch;
 mod task_batch;
 mod task_future;
 mod worker;
@@ -46,7 +47,6 @@ mod worker;
 use std::sync::OnceLock;
 
 pub use pool::ZeroPool;
-
 pub use task_future::TaskFuture;
 
 static GLOBAL_ZP: OnceLock<ZeroPool> = OnceLock::new();
