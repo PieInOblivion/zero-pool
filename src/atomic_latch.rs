@@ -31,12 +31,24 @@ impl AtomicLatch {
     }
 
     pub fn wait(&self) {
+        debug_assert_eq!(
+            self.owner_thread.id(),
+            thread::current().id(),
+            "TaskFuture::wait() must be called from the thread that created it."
+        );
+
         while !self.is_complete() {
             thread::park();
         }
     }
 
     pub fn wait_timeout(&self, timeout: Duration) -> bool {
+        debug_assert_eq!(
+            self.owner_thread.id(),
+            thread::current().id(),
+            "TaskFuture::wait_timeout() must be called from the thread that created it."
+        );
+
         let start = Instant::now();
         loop {
             if self.is_complete() {
