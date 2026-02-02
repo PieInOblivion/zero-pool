@@ -36,10 +36,10 @@
 //! assert_eq!(result, 84);
 //! ```
 
+mod atomic_latch;
 mod padded_type;
 mod pool;
 mod queue;
-mod startup_latch;
 mod task_batch;
 mod task_future;
 mod worker;

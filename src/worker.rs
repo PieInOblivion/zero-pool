@@ -4,18 +4,18 @@ use std::{
 };
 
 use crate::{
+    atomic_latch::AtomicLatch,
     queue::{NOT_IN_CRITICAL, Queue},
-    startup_latch::StartupLatch,
 };
 
-pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: Arc<StartupLatch>) -> JoinHandle<()> {
+pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: AtomicLatch) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {
             // register this thread with the queue's waiter so it can be unparked by id
             queue.register_worker_thread(id);
             // signal registration complete and wait for all workers + main
-            latch.decrement();
+            latch.decrement(1);
             drop(latch);
 
             let mut cached_local_epoch = NOT_IN_CRITICAL;
