@@ -117,7 +117,10 @@ impl Queue {
                 Ok(_) => {
                     current = next;
                 }
-                Err(new_head) => current = new_head,
+                Err(new_head) => {
+                    current = new_head;
+                    std::hint::spin_loop();
+                }
             }
         }
     }
