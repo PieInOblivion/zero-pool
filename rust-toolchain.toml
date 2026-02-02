@@ -1,2 +1,3 @@
+# zero-pool compiles on stable, but currently uses nightly for benches
 [toolchain]
 channel = "nightly"
