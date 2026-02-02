@@ -101,7 +101,7 @@ fn test_massive_simple_tasks() {
         })
         .collect();
 
-    let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
+    let batch = pool.submit_batch(simple_cpu_task, &tasks);
     batch.wait();
 
     let completed_count = results.iter().filter(|&&r| r != 0).count();
@@ -112,7 +112,7 @@ fn test_massive_simple_tasks() {
 fn test_empty_batch_submission() {
     let pool = ZeroPool::new();
     let empty_tasks: Vec<SimpleTask> = Vec::new();
-    let empty_batch = pool.submit_batch_uniform(simple_cpu_task, &empty_tasks);
+    let empty_batch = pool.submit_batch(simple_cpu_task, &empty_tasks);
 
     assert!(empty_batch.is_complete());
     empty_batch.wait();
@@ -133,7 +133,7 @@ fn test_single_worker_behavior() {
         })
         .collect();
 
-    let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
+    let batch = pool.submit_batch(simple_cpu_task, &tasks);
     batch.wait();
 
     for (i, &result) in results.iter().enumerate() {
@@ -158,7 +158,7 @@ fn test_different_worker_counts() {
             })
             .collect();
 
-        let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
+        let batch = pool.submit_batch(simple_cpu_task, &tasks);
         batch.wait();
 
         let completed = results.iter().filter(|&&r| r != 0).count();
@@ -180,7 +180,7 @@ fn test_shutdown_and_cleanup() {
             .map(|result| SimpleTask { iterations, result })
             .collect();
 
-        let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
+        let batch = pool.submit_batch(simple_cpu_task, &tasks);
         batch.wait();
 
         completed_before_drop = final_results.iter().filter(|&&r| r != 0).count();
@@ -241,7 +241,7 @@ fn test_wait_timeout() {
 
     // Test empty batch with timeout
     let empty_tasks: Vec<SimpleTask> = Vec::new();
-    let batch = pool.submit_batch_uniform(simple_cpu_task, &empty_tasks);
+    let batch = pool.submit_batch(simple_cpu_task, &empty_tasks);
 
     let start = Instant::now();
     let completed = batch.wait_timeout(Duration::from_millis(100));
@@ -271,7 +271,7 @@ fn test_stress_rapid_batches() {
             })
             .collect();
 
-        let batch = pool.submit_batch_uniform(simple_cpu_task, &tasks);
+        let batch = pool.submit_batch(simple_cpu_task, &tasks);
         let completed = batch.wait_timeout(Duration::from_secs(10));
 
         assert!(completed, "Batch {} timed out", batch_num);
@@ -296,7 +296,7 @@ fn test_benchmark_simulation() {
             })
             .collect();
 
-        let batch = pool.submit_batch_uniform(simple_task_fn, &tasks);
+        let batch = pool.submit_batch(simple_task_fn, &tasks);
         let completed = batch.wait_timeout(Duration::from_secs(5));
 
         assert!(completed, "Iteration {} timed out", iteration);
@@ -322,7 +322,7 @@ fn test_complex_workload_scaling() {
             .map(|result| ComplexTask { size, result })
             .collect();
 
-        let batch = pool.submit_batch_uniform(complex_task_fn, &params);
+        let batch = pool.submit_batch(complex_task_fn, &params);
         batch.wait();
 
         let completed = results.iter().filter(|&&r| r != 0).count();

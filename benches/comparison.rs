@@ -70,7 +70,7 @@ fn bench_indexed_computation_zeropool(b: &mut Bencher) {
         }
 
         // submit uniform batch and wait for completion
-        let batch = pool.submit_batch_uniform(compute_task_fn, &tasks);
+        let batch = pool.submit_batch(compute_task_fn, &tasks);
         batch.wait();
 
         black_box(results);
@@ -114,7 +114,7 @@ fn bench_task_overhead_zeropool(b: &mut Bencher) {
             tasks.push(EmptyTask { result });
         }
 
-        let batch = pool.submit_batch_uniform(empty_task_fn, &tasks);
+        let batch = pool.submit_batch(empty_task_fn, &tasks);
         batch.wait();
 
         black_box(results);
@@ -188,7 +188,7 @@ fn bench_heavy_compute_zeropool(b: &mut Bencher) {
             });
         }
 
-        let batch = pool.submit_batch_uniform(heavy_compute_task_fn, &tasks);
+        let batch = pool.submit_batch(heavy_compute_task_fn, &tasks);
         batch.wait();
 
         black_box(results);

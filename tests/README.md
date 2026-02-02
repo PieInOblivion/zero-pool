@@ -82,7 +82,7 @@ test src/pool.rs - pool::ZeroPool::new (line 24) ... ok
 test src/pool.rs - pool::ZeroPool::submit_task (line 68) ... ok
 test src/lib.rs - (line 23) ... ok
 test src/pool.rs - pool::ZeroPool::with_workers (line 41) ... ok
-test src/pool.rs - pool::ZeroPool::submit_batch_uniform (line 98) ... ok
+test src/pool.rs - pool::ZeroPool::submit_batch (line 98) ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.88s
 

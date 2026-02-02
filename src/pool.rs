@@ -109,14 +109,14 @@ impl ZeroPool {
     /// let task_params: Vec<_> = (0..1000)
     ///     .map(|i| MyTaskParams { value: i as u64, result: &mut results[i] })
     ///     .collect();
-    /// let future = pool.submit_batch_uniform(my_task_fn, &task_params);
+    /// let future = pool.submit_batch(my_task_fn, &task_params);
     /// future.wait();
     /// assert_eq!(results[0], 0);
     /// assert_eq!(results[1], 2);
     /// assert_eq!(results[999], 1998);
     /// ```
     #[inline]
-    pub fn submit_batch_uniform<T>(&self, task_fn: fn(&T), params_vec: &[T]) -> TaskFuture {
+    pub fn submit_batch<T>(&self, task_fn: fn(&T), params_vec: &[T]) -> TaskFuture {
         self.queue.push_task_batch(task_fn, params_vec)
     }
 }
