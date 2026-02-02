@@ -8,16 +8,20 @@ use std::time::Duration;
 /// indefinitely, or waited on with a timeout.
 ///
 /// `TaskFuture` is cheaply cloneable. However, it captures the thread handle
-/// of the thread that created it, and `wait`/`wait_timeout` should only be
-/// called from that same thread. If sharing the future to other threads,
-/// is_complete() will still work.
+/// of the thread that created it.
+///
+/// If sharing the future with other threads, `is_complete()` is safe to call
+/// from anywhere.
+///
+/// **Important:** `wait()` and `wait_timeout()` **must** be called from the
+/// same thread that created the `TaskFuture`. Calling these methods from a
+/// different thread will panic in debug builds and may cause the calling thread
+/// to hang indefinitely in release builds.
+///
 #[derive(Clone)]
 pub struct TaskFuture(AtomicLatch);
 
 impl TaskFuture {
-    // create a new work future for the given number of tasks.
-    // padding 'remaining' overall tests like a net negative for performance,
-    // this is however inconclusive
     pub(crate) fn new(task_count: usize) -> Self {
         TaskFuture(AtomicLatch::new(task_count))
     }
