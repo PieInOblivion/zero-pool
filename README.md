@@ -21,7 +21,7 @@ Because the library uses raw pointers, you must ensure parameter structs (includ
 This approach allows complete freedom to optimise multi-threaded workloads any way you want.
 
 #### Notes
-- TaskFuture uses a Mutex + Condvar to block waiting threads and allow multiple threads to wait on the same task completion. All other pool operations are lock-free.
+- TaskFuture is easily clonable, but `wait()`/`wait_timeout()` must be called from the thread that submitted the task. `is_complete()` is safe to call from any thread.
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
 - Task functions take a single parameter (e.g. `&MyTaskParams`), and the parameter name can be any valid identifier.
 
@@ -94,7 +94,7 @@ let tasks: Vec<_> = results.iter_mut().enumerate().map(|(i, result)| {
     ComputeParams { work_amount: 1000 + i * 10, result }
 }).collect();
 
-let future = pool.submit_batch_uniform(compute_task, &tasks);
+let future = pool.submit_batch(compute_task, &tasks);
 future.wait();
 
 println!("First result: {}", results[0]);
@@ -142,7 +142,7 @@ let batch_task_params: Vec<_> = batch_results.iter_mut().enumerate()
 
 // Submit all batches
 let future1 = pool.submit_task(compute_task, &single_task_params);
-let future2 = pool.submit_batch_uniform(compute_task, &batch_task_params);
+let future2 = pool.submit_batch(compute_task, &batch_task_params);
 
 // Wait on them in any order; completion order is not guaranteed
 future1.wait();
