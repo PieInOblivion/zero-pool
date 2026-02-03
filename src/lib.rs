@@ -62,11 +62,11 @@ pub fn global_pool() -> &'static ZeroPool {
 
 /// Function pointer type for task execution
 ///
-/// Tasks receive a raw pointer to their parameter struct and must
+/// Tasks receive a non-null pointer to their parameter struct and must
 /// cast it to the appropriate type for safe access.
 pub(crate) type TaskFnPointer = fn(NonNull<u8>);
 
-/// Raw pointer to task parameter struct
+/// Non-null pointer to task parameter struct
 ///
 /// This is type-erased for uniform storage but must be cast back
 /// to the original parameter type within the task function.
