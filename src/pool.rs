@@ -1,6 +1,4 @@
-use crate::{
-    atomic_latch::AtomicLatch, queue::Queue, task_future::TaskFuture, worker::spawn_worker,
-};
+use crate::{queue::Queue, task_future::TaskFuture, worker::spawn_worker};
 use std::{
     num::NonZeroUsize,
     sync::Arc,
@@ -48,7 +46,7 @@ impl ZeroPool {
 
         let queue = Arc::new(Queue::new(worker_count));
 
-        let latch = AtomicLatch::new(worker_count);
+        let latch = TaskFuture::new(worker_count);
         let workers = (0..worker_count)
             .map(|id| spawn_worker(id, queue.clone(), latch.clone()))
             .collect();

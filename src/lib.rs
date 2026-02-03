@@ -36,7 +36,6 @@
 //! assert_eq!(result, 84);
 //! ```
 
-mod atomic_latch;
 mod padded_type;
 mod pool;
 mod queue;

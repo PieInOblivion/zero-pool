@@ -1,5 +1,7 @@
-use crate::atomic_latch::AtomicLatch;
-use std::time::Duration;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread::{self, Thread};
+use std::time::{Duration, Instant};
 
 /// A future that tracks completion of submitted tasks
 ///
@@ -19,11 +21,17 @@ use std::time::Duration;
 /// to hang indefinitely in release builds.
 ///
 #[derive(Clone)]
-pub struct TaskFuture(AtomicLatch);
+pub struct TaskFuture {
+    count: Arc<AtomicUsize>,
+    owner_thread: Thread,
+}
 
 impl TaskFuture {
     pub(crate) fn new(task_count: usize) -> Self {
-        TaskFuture(AtomicLatch::new(task_count))
+        TaskFuture {
+            count: Arc::new(AtomicUsize::new(task_count)),
+            owner_thread: thread::current(),
+        }
     }
 
     /// Check if all tasks are complete without blocking
@@ -31,14 +39,22 @@ impl TaskFuture {
     /// Returns `true` if all tasks have finished execution.
     /// This is a non-blocking operation using atomic loads.
     pub fn is_complete(&self) -> bool {
-        self.0.is_complete()
+        self.count.load(Ordering::Acquire) == 0
     }
 
     /// Wait for all tasks to complete
     ///
     /// First checks completion with an atomic load; if incomplete, parks the thread that sent the work.
-    pub fn wait(self) {
-        self.0.wait();
+    pub fn wait(&self) {
+        debug_assert_eq!(
+            self.owner_thread.id(),
+            thread::current().id(),
+            "TaskFuture::wait() must be called from the thread that created it."
+        );
+
+        while !self.is_complete() {
+            thread::park();
+        }
     }
 
     /// Wait for all tasks to complete with a timeout
@@ -46,12 +62,33 @@ impl TaskFuture {
     /// First checks completion with an atomic load; if incomplete, parks the thread that sent the work.
     /// Returns `true` if all tasks completed within the timeout,
     /// `false` if the timeout was reached first.
-    pub fn wait_timeout(self, timeout: Duration) -> bool {
-        self.0.wait_timeout(timeout)
+    pub fn wait_timeout(&self, timeout: Duration) -> bool {
+        debug_assert_eq!(
+            self.owner_thread.id(),
+            thread::current().id(),
+            "TaskFuture::wait_timeout() must be called from the thread that created it."
+        );
+
+        let start = Instant::now();
+        loop {
+            if self.is_complete() {
+                return true;
+            }
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                return false;
+            }
+            thread::park_timeout(timeout - elapsed);
+        }
     }
 
     // completes multiple tasks, decrements counter and notifies if all done
     pub(crate) fn complete_many(&self, count: usize) -> bool {
-        self.0.decrement(count)
+        if self.count.fetch_sub(count, Ordering::Release) == count {
+            self.owner_thread.unpark();
+            true
+        } else {
+            false
+        }
     }
 }
