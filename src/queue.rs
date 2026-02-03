@@ -256,6 +256,12 @@ impl Queue {
 
 impl Drop for Queue {
     fn drop(&mut self) {
+        for thread in self.threads.iter() {
+            unsafe {
+                (*thread.get()).assume_init_drop();
+            }
+        }
+
         let mut current = self.oldest.load(Ordering::Relaxed);
         while !current.is_null() {
             let batch = unsafe { Box::from_raw(current) };
