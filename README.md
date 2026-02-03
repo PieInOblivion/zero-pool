@@ -25,7 +25,7 @@ This approach allows complete freedom to optimise multi-threaded workloads any w
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
 - Task functions take a single parameter (e.g. `&MyTaskParams`), and the parameter name can be any valid identifier.
 
-## Benchmarks (AMD 5900X, Linux 6.17)
+## Benchmarks (AMD 5900X, Linux 6.18)
 ```rust
 test bench_heavy_compute_rayon             ... bench:   4,906,749.25 ns/iter (+/- 612,314.91)
 test bench_heavy_compute_zeropool          ... bench:   4,691,815.45 ns/iter (+/- 414,315.97)
