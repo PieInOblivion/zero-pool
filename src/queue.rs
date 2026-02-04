@@ -112,7 +112,7 @@ impl Queue {
                 current,
                 next,
                 Ordering::Release,
-                Ordering::Relaxed,
+                Ordering::Acquire,
             ) {
                 Ok(_) => {
                     current = next;
