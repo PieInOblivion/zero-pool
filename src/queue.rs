@@ -64,7 +64,7 @@ impl Queue {
         let raw_fn: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(raw_fn, params, future.clone())));
 
-        let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
+        let prev_tail = self.tail.swap(new_batch, Ordering::SeqCst);
         unsafe {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
@@ -241,7 +241,7 @@ impl Queue {
     }
 
     pub fn has_tasks(&self) -> bool {
-        let tail = self.tail.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::SeqCst);
         unsafe { (&*tail).has_unclaimed_tasks() }
     }
 
