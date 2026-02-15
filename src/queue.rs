@@ -89,10 +89,19 @@ impl Queue {
             }
 
             // try to advance head, but continue regardless
-            current = self
-                .head
-                .compare_exchange_weak(current, next, Ordering::Release, Ordering::Acquire)
-                .unwrap_or_else(|new_head| new_head);
+            match self.head.compare_exchange_weak(
+                current,
+                next,
+                Ordering::Release,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => {
+                    current = next;
+                }
+                Err(new_head) => {
+                    current = new_head;
+                }
+            }
         }
     }
 
