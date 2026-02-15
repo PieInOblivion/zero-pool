@@ -1,7 +1,9 @@
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::thread::{self, Thread};
+use std::time::{Duration, Instant};
 
-use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType, task_future::TaskFuture};
+use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType};
 
 pub struct TaskBatch {
     next_byte_offset: PaddedType<AtomicUsize>,
@@ -10,26 +12,43 @@ pub struct TaskBatch {
     param_stride: usize,
     params_total_bytes: usize,
     pub task_fn_ptr: TaskFnPointer,
-    pub epoch: AtomicUsize,
-    pub future: TaskFuture,
     pub next: AtomicPtr<TaskBatch>,
+
+    count: AtomicUsize,
+    owner_thread: Thread,
+    viewers: AtomicUsize,
 }
 
 impl TaskBatch {
-    pub fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
+    pub(crate) fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T]) -> Self {
         TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
             params_ptr: NonNull::from(params).cast(),
             param_stride: std::mem::size_of::<T>(),
             params_total_bytes: std::mem::size_of_val(params),
             task_fn_ptr,
-            epoch: AtomicUsize::new(0),
-            future,
             next: AtomicPtr::new(std::ptr::null_mut()),
+            count: AtomicUsize::new(params.len()),
+            owner_thread: thread::current(),
+            viewers: AtomicUsize::new(2), // queue reference + always-created task future
         }
     }
 
-    pub fn claim_next_param(&self) -> Option<TaskParamPointer> {
+    pub(crate) fn new_anchor(task_fn_ptr: TaskFnPointer) -> Self {
+        TaskBatch {
+            next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
+            params_ptr: NonNull::dangling(),
+            param_stride: 1,
+            params_total_bytes: 0,
+            task_fn_ptr,
+            next: AtomicPtr::new(std::ptr::null_mut()),
+            count: AtomicUsize::new(0),
+            owner_thread: thread::current(),
+            viewers: AtomicUsize::new(1), // anchor exception: queue-owned only
+        }
+    }
+
+    pub(crate) fn claim_next_param(&self) -> Option<TaskParamPointer> {
         let byte_offset = self
             .next_byte_offset
             .fetch_add(self.param_stride, Ordering::Relaxed);
@@ -40,7 +59,74 @@ impl TaskBatch {
         unsafe { Some(self.params_ptr.add(byte_offset)) }
     }
 
-    pub fn has_unclaimed_tasks(&self) -> bool {
+    pub(crate) fn has_unclaimed_tasks(&self) -> bool {
         self.next_byte_offset.load(Ordering::Relaxed) < self.params_total_bytes
+    }
+
+    pub(crate) fn viewers_increment(&self) {
+        self.viewers.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub(crate) fn viewers_decrement_and_is_zero(&self) -> bool {
+        self.viewers.fetch_sub(1, Ordering::AcqRel) == 1
+    }
+
+    pub(crate) fn viewers_count(&self) -> usize {
+        self.viewers.load(Ordering::Acquire)
+    }
+
+    /// Check if all tasks are complete without blocking
+    ///
+    /// Returns `true` if all tasks have finished execution.
+    /// This is a non-blocking operation using atomic loads.
+    pub fn is_complete(&self) -> bool {
+        self.count.load(Ordering::Acquire) == 0
+    }
+
+    /// Wait for all tasks to complete
+    ///
+    /// First checks completion with an atomic load; if incomplete, parks the thread that sent the work.
+    pub fn wait(&self) {
+        debug_assert_eq!(
+            self.owner_thread.id(),
+            thread::current().id(),
+            "TaskFuture::wait() must be called from the thread that created it."
+        );
+
+        while !self.is_complete() {
+            thread::park();
+        }
+    }
+
+    /// Wait for all tasks to complete with a timeout
+    ///
+    /// First checks completion with an atomic load; if incomplete, parks the thread that sent the work.
+    /// Returns `true` if all tasks completed within the timeout,
+    /// `false` if the timeout was reached first.
+    pub fn wait_timeout(&self, timeout: Duration) -> bool {
+        debug_assert_eq!(
+            self.owner_thread.id(),
+            thread::current().id(),
+            "TaskFuture::wait_timeout() must be called from the thread that created it."
+        );
+
+        let start = Instant::now();
+        loop {
+            if self.is_complete() {
+                return true;
+            }
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                return false;
+            }
+            thread::park_timeout(timeout - elapsed);
+        }
+    }
+
+    // completes multiple tasks, decrements counter and notifies if all done
+    pub(crate) fn complete_many(&self, completed: usize) {
+        if self.count.fetch_sub(completed, Ordering::Release) == completed {
+            self.owner_thread.unpark();
+        }
     }
 }

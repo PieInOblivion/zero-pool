@@ -1,32 +1,37 @@
 use std::{
-    sync::Arc,
-    thread::{self, JoinHandle},
+    ptr,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    thread::{self, JoinHandle, Thread},
 };
 
-use crate::{
-    queue::{NOT_IN_CRITICAL, Queue},
-    task_future::TaskFuture,
-};
+use crate::queue::Queue;
 
-pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHandle<()> {
+pub fn spawn_worker(
+    id: usize,
+    queue: Arc<Queue>,
+    latch_thread: Thread,
+    latch_count_ptr: usize,
+) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {
             // register this thread with the queue's waiter so it can be unparked by id
             queue.register_worker_thread(id);
-            // signal registration complete and wait for all workers + main
-            latch.complete_many(1);
-            drop(latch);
+            // signal registration complete
+            let latch_count = unsafe { &*(latch_count_ptr as *const AtomicUsize) };
+            if latch_count.fetch_sub(1, Ordering::Release) == 1 {
+                latch_thread.unpark();
+            }
+            drop(latch_thread);
 
-            let mut cached_local_epoch = NOT_IN_CRITICAL;
+            let mut last_incremented_on = ptr::null_mut();
 
-            loop {
-                if !queue.wait_for_work(id, &mut cached_local_epoch) {
-                    break;
-                }
-
+            while queue.wait_for_work(id) {
                 while let Some((batch, first_param)) =
-                    queue.get_next_batch(id, &mut cached_local_epoch)
+                    queue.get_next_batch(&mut last_incremented_on)
                 {
                     let mut completed = 1;
                     (batch.task_fn_ptr)(first_param);
@@ -36,10 +41,12 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
                         completed += 1;
                     }
 
-                    if batch.future.complete_many(completed) && queue.should_reclaim() {
-                        queue.reclaim();
-                    }
+                    batch.complete_many(completed);
                 }
+            }
+
+            if !last_incremented_on.is_null() {
+                queue.release_viewer(last_incremented_on);
             }
         })
         .expect("spawn failed")
