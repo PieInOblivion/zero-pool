@@ -124,9 +124,12 @@ impl TaskBatch {
     }
 
     // completes multiple tasks, decrements counter and notifies if all done
-    pub(crate) fn complete_many(&self, completed: usize) {
+    pub(crate) fn complete_many(&self, completed: usize) -> bool {
         if self.count.fetch_sub(completed, Ordering::Release) == completed {
             self.owner_thread.unpark();
+            true
+        } else {
+            false
         }
     }
 }

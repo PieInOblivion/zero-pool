@@ -41,7 +41,9 @@ pub fn spawn_worker(
                         completed += 1;
                     }
 
-                    batch.complete_many(completed);
+                    if batch.complete_many(completed) {
+                        queue.release_viewer(batch as *const _ as *mut _);
+                    }
                 }
 
                 if !last_incremented_on.is_null() {

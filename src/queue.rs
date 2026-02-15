@@ -26,7 +26,7 @@ impl Queue {
         let anchor_node = Box::into_raw(Box::new(TaskBatch::new_anchor(noop)));
 
         let threads_is_awake: Box<[_]> = (0..worker_count)
-            .map(|_| PaddedType::new(AtomicBool::new(true)))
+            .map(|_| PaddedType::new(AtomicBool::new(false)))
             .collect();
 
         let threads: Box<[_]> = (0..worker_count)
@@ -87,20 +87,10 @@ impl Queue {
             }
 
             // try to advance head, but continue regardless
-            match self.head.compare_exchange_weak(
-                current,
-                next,
-                Ordering::Release,
-                Ordering::Acquire,
-            ) {
-                Ok(_) => {
-                    self.release_viewer(current);
-                    current = next;
-                }
-                Err(new_head) => {
-                    current = new_head;
-                }
-            }
+            current = self
+                .head
+                .compare_exchange_weak(current, next, Ordering::Release, Ordering::Acquire)
+                .unwrap_or_else(|new_head| new_head);
         }
     }
 
@@ -115,14 +105,20 @@ impl Queue {
         }
     }
 
-    pub fn drop_from_oldest(&self, current: *mut TaskBatch) {
+    fn drop_from_oldest(&self, current: *mut TaskBatch) {
         let oldest = self.oldest.load(Ordering::Acquire);
         if oldest.is_null() || current != oldest {
             return;
         }
 
+        let head_snapshot = self.head.load(Ordering::Acquire);
+
         let mut node = oldest;
         while !node.is_null() {
+            if node == head_snapshot {
+                break;
+            }
+
             let viewers = unsafe { (&*node).viewers_count() };
             if viewers != 0 {
                 break;
@@ -201,7 +197,13 @@ impl Queue {
     }
 
     pub fn has_tasks(&self) -> bool {
+        let head = self.head.load(Ordering::Acquire);
         let tail = self.tail.load(Ordering::SeqCst);
+
+        if head != tail {
+            return true;
+        }
+
         unsafe { (&*tail).has_unclaimed_tasks() }
     }
 
