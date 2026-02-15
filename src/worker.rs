@@ -43,6 +43,7 @@ pub fn spawn_worker(
 
                     if batch.complete_many(completed) {
                         queue.release_viewer(batch as *const _ as *mut _);
+                        queue.try_reclaim_worker();
                     }
                 }
 
@@ -50,6 +51,8 @@ pub fn spawn_worker(
                     queue.release_viewer(last_incremented_on);
                     last_incremented_on = ptr::null_mut();
                 }
+
+                queue.try_reclaim_worker();
             }
         })
         .expect("spawn failed")

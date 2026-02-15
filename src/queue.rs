@@ -12,6 +12,7 @@ pub struct Queue {
     head: PaddedType<AtomicPtr<TaskBatch>>,
     tail: PaddedType<AtomicPtr<TaskBatch>>,
     oldest: PaddedType<AtomicPtr<TaskBatch>>,
+    reclaiming: PaddedType<AtomicBool>,
     threads_is_awake: Box<[PaddedType<AtomicBool>]>,
     threads: Box<[UnsafeCell<MaybeUninit<Thread>>]>,
     shutdown: AtomicBool,
@@ -37,6 +38,7 @@ impl Queue {
             head: PaddedType::new(AtomicPtr::new(anchor_node)),
             tail: PaddedType::new(AtomicPtr::new(anchor_node)),
             oldest: PaddedType::new(AtomicPtr::new(anchor_node)),
+            reclaiming: PaddedType::new(AtomicBool::new(false)),
             threads_is_awake,
             threads,
             shutdown: AtomicBool::new(false),
@@ -52,7 +54,7 @@ impl Queue {
         unsafe {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
-
+        println!("New Batch: {:?}", new_batch);
         self.notify(params.len());
         TaskFuture::from_batch(queue_ptr, new_batch)
     }
@@ -99,22 +101,30 @@ impl Queue {
             return;
         }
 
-        let is_zero = unsafe { (&*batch_ptr).viewers_decrement_and_is_zero() };
-        if is_zero {
-            self.drop_from_oldest(batch_ptr);
-        }
+        let _ = unsafe { (&*batch_ptr).viewers_decrement_and_is_zero() };
     }
 
-    fn drop_from_oldest(&self, current: *mut TaskBatch) {
-        let oldest = self.oldest.load(Ordering::Acquire);
-        if oldest.is_null() || current != oldest {
+    pub fn try_reclaim_worker(&self) {
+        if self
+            .reclaiming
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
             return;
         }
+
+        self.reclaim_from_oldest();
+
+        self.reclaiming.store(false, Ordering::Release);
+    }
+
+    fn reclaim_from_oldest(&self) {
+        let oldest = self.oldest.load(Ordering::Acquire);
 
         let head_snapshot = self.head.load(Ordering::Acquire);
 
         let mut node = oldest;
-        while !node.is_null() {
+        loop {
             if node == head_snapshot {
                 break;
             }
@@ -128,6 +138,13 @@ impl Queue {
             unsafe {
                 drop(Box::from_raw(node));
             }
+            println!("Drop Batch: {:?}", node);
+
+            if next.is_null() {
+                node = next;
+                break;
+            }
+
             node = next;
         }
 
@@ -230,6 +247,7 @@ impl Drop for Queue {
             unsafe {
                 drop(Box::from_raw(current));
             }
+            println!("Drop() Batch: {:?}", current);
             current = next;
         }
     }

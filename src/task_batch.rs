@@ -44,7 +44,7 @@ impl TaskBatch {
             next: AtomicPtr::new(std::ptr::null_mut()),
             count: AtomicUsize::new(0),
             owner_thread: thread::current(),
-            viewers: AtomicUsize::new(1), // anchor exception: queue-owned only
+            viewers: AtomicUsize::new(0), // anchor reclaimable once head advances beyond it
         }
     }
 
