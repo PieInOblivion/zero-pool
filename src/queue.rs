@@ -44,11 +44,6 @@ impl Queue {
     }
 
     pub fn push_task_batch<T>(self: &Arc<Self>, task_fn: fn(&T), params: &[T]) -> TaskFuture {
-        assert!(
-            !params.is_empty(),
-            "zero_pool does not accept empty task batches"
-        );
-
         let raw_fn: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
         let queue_ptr = NonNull::from(self.as_ref());
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(raw_fn, params)));
@@ -152,15 +147,16 @@ impl Queue {
         // the added contention of a 'start_from' shared atomic tends to be slower
         // than iterating over the padded atomics array, even if its from the start every time
         for i in 0..num_workers {
+            if count == 0 {
+                break;
+            }
+
             if self.threads_is_awake[i]
                 .compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
                 .is_ok()
             {
                 unsafe {
                     (*self.threads[i].get()).assume_init_ref().unpark();
-                    if count == 1 {
-                        break;
-                    }
                     count -= 1;
                 }
             }
