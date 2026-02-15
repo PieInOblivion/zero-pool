@@ -43,10 +43,11 @@ pub fn spawn_worker(
 
                     batch.complete_many(completed);
                 }
-            }
 
-            if !last_incremented_on.is_null() {
-                queue.release_viewer(last_incremented_on);
+                if !last_incremented_on.is_null() {
+                    queue.release_viewer(last_incremented_on);
+                    last_incremented_on = ptr::null_mut();
+                }
             }
         })
         .expect("spawn failed")
