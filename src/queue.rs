@@ -23,7 +23,7 @@ impl Queue {
         fn noop(_: TaskParamPointer) {}
         let anchor_node = Box::into_raw(Box::new(TaskBatch::new::<u8>(noop, &[])));
         unsafe {
-            (&*anchor_node).viewers_decrement();
+            TaskBatch::release_ptr(anchor_node);
         }
 
         let threads_is_awake: Box<[_]> = (0..worker_count)
@@ -65,7 +65,6 @@ impl Queue {
     pub fn get_next_batch(
         &self,
         last_incremented_on: &mut *mut TaskBatch,
-        retired_batches: &mut Vec<*mut TaskBatch>,
     ) -> Option<(&TaskBatch, TaskParamPointer)> {
         let mut current = self.head.load(Ordering::Acquire);
 
@@ -80,7 +79,7 @@ impl Queue {
                     *last_incremented_on = current;
 
                     if !previous.is_null() {
-                        unsafe { (&*previous).viewers_decrement() };
+                        unsafe { TaskBatch::release_ptr(previous) };
                     }
                 }
 
@@ -100,7 +99,9 @@ impl Queue {
                 Ordering::Acquire,
             ) {
                 Ok(_) => {
-                    retired_batches.push(current);
+                    unsafe {
+                        TaskBatch::release_ptr(current);
+                    }
                     current = next;
                 }
                 Err(new_head) => {
@@ -180,7 +181,7 @@ impl Drop for Queue {
         while !current.is_null() {
             let next = unsafe { (&*current).next.load(Ordering::Acquire) };
             unsafe {
-                drop(Box::from_raw(current));
+                TaskBatch::release_ptr(current);
             }
             println!("Drop() Batch: {:?}", current);
             current = next;

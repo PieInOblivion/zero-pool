@@ -9,10 +9,6 @@ use std::{
 
 use crate::{queue::Queue, task_batch::TaskBatch};
 
-const RETIRED_VEC_MIN_CAP: usize = 8;
-const RETIRED_VEC_SHRINK_RATIO: usize = 4;
-const RETIRED_VEC_SHRINK_CADENCE: u8 = 32;
-
 pub fn spawn_worker(
     id: usize,
     queue: Arc<Queue>,
@@ -32,12 +28,10 @@ pub fn spawn_worker(
             drop(latch_thread);
 
             let mut last_incremented_on = ptr::null_mut();
-            let mut retired_batches = Vec::with_capacity(RETIRED_VEC_MIN_CAP);
-            let mut reclaim_calls: u8 = 0;
 
             while queue.wait_for_work(id) {
                 while let Some((batch, first_param)) =
-                    queue.get_next_batch(&mut last_incremented_on, &mut retired_batches)
+                    queue.get_next_batch(&mut last_incremented_on)
                 {
                     let mut completed = 1;
                     (batch.task_fn_ptr)(first_param);
@@ -48,51 +42,17 @@ pub fn spawn_worker(
                     }
 
                     if batch.complete_many(completed) {
-                        batch.viewers_decrement();
-                        reclaim_local(&mut retired_batches, &mut reclaim_calls);
+                        unsafe {
+                            TaskBatch::release_ptr(batch as *const TaskBatch as *mut TaskBatch);
+                        }
                     }
                 }
 
                 if !last_incremented_on.is_null() {
-                    unsafe { (&*last_incremented_on).viewers_decrement() };
+                    unsafe { TaskBatch::release_ptr(last_incremented_on) };
                     last_incremented_on = ptr::null_mut();
                 }
-
-                reclaim_local(&mut retired_batches, &mut reclaim_calls);
             }
-
-            reclaim_local(&mut retired_batches, &mut reclaim_calls);
         })
         .expect("spawn failed")
-}
-
-fn reclaim_local(retired_batches: &mut Vec<*mut TaskBatch>, reclaim_calls: &mut u8) {
-    let mut index = 0;
-
-    while index < retired_batches.len() {
-        let batch_ptr = retired_batches[index];
-        let can_reclaim = unsafe { (&*batch_ptr).viewers_count() == 0 };
-
-        if can_reclaim {
-            println!("reclaim_local: {:?}", batch_ptr);
-            unsafe {
-                drop(Box::from_raw(batch_ptr));
-            }
-            retired_batches.swap_remove(index);
-        } else {
-            index += 1;
-        }
-    }
-
-    *reclaim_calls = reclaim_calls.wrapping_add(1);
-    if *reclaim_calls % RETIRED_VEC_SHRINK_CADENCE == 0 {
-        let len = retired_batches.len();
-        let cap = retired_batches.capacity();
-        let baseline = len.max(RETIRED_VEC_MIN_CAP);
-
-        if cap > baseline * RETIRED_VEC_SHRINK_RATIO {
-            let target = len.max(RETIRED_VEC_MIN_CAP);
-            retired_batches.shrink_to(target);
-        }
-    }
 }

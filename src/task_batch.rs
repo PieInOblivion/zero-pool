@@ -21,7 +21,7 @@ pub struct TaskBatch {
 
 impl TaskBatch {
     pub(crate) fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T]) -> Self {
-        let initial_viewers = if params.is_empty() { 1 } else { 2 };
+        let initial_viewers = if params.is_empty() { 2 } else { 3 };
 
         TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
@@ -55,12 +55,13 @@ impl TaskBatch {
         self.viewers.fetch_add(1, Ordering::Release);
     }
 
-    pub(crate) fn viewers_decrement(&self) {
-        self.viewers.fetch_sub(1, Ordering::Release);
-    }
-
-    pub(crate) fn viewers_count(&self) -> usize {
-        self.viewers.load(Ordering::Acquire)
+    pub(crate) unsafe fn release_ptr(batch_ptr: *mut TaskBatch) {
+        let batch = unsafe { &*batch_ptr };
+        if batch.viewers.fetch_sub(1, Ordering::AcqRel) == 1 {
+            unsafe {
+                drop(Box::from_raw(batch_ptr));
+            }
+        }
     }
 
     /// Check if all tasks are complete without blocking

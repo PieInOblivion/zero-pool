@@ -50,7 +50,7 @@ impl Clone for TaskFuture {
 impl Drop for TaskFuture {
     fn drop(&mut self) {
         unsafe {
-            self.task.as_ref().viewers_decrement();
+            TaskBatch::release_ptr(self.task.as_ptr());
         }
     }
 }
