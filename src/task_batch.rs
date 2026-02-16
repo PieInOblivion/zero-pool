@@ -14,7 +14,7 @@ pub struct TaskBatch {
     pub task_fn_ptr: TaskFnPointer,
     pub next: AtomicPtr<TaskBatch>,
 
-    count: AtomicUsize,
+    uncompleted: AtomicUsize,
     owner_thread: Thread,
     viewers: AtomicUsize,
 }
@@ -30,7 +30,7 @@ impl TaskBatch {
             params_total_bytes: std::mem::size_of_val(params),
             task_fn_ptr,
             next: AtomicPtr::new(std::ptr::null_mut()),
-            count: AtomicUsize::new(params.len()),
+            uncompleted: AtomicUsize::new(params.len()),
             owner_thread: thread::current(),
             viewers: AtomicUsize::new(initial_viewers),
         }
@@ -68,7 +68,7 @@ impl TaskBatch {
     /// Returns `true` if all tasks have finished execution.
     /// This is a non-blocking operation using atomic loads.
     pub fn is_complete(&self) -> bool {
-        self.count.load(Ordering::Acquire) == 0
+        self.uncompleted.load(Ordering::Acquire) == 0
     }
 
     /// Wait for all tasks to complete
@@ -112,8 +112,8 @@ impl TaskBatch {
     }
 
     // completes multiple tasks, decrements counter and notifies if all done
-    pub(crate) fn complete_many(&self, completed: usize) -> bool {
-        if self.count.fetch_sub(completed, Ordering::Release) == completed {
+    pub(crate) fn complete_many(&self, n: usize) -> bool {
+        if self.uncompleted.fetch_sub(n, Ordering::Release) == n {
             self.owner_thread.unpark();
             true
         } else {
