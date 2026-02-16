@@ -8,6 +8,7 @@ use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType};
 pub struct TaskBatch {
     next_byte_offset: PaddedType<AtomicUsize>,
     // pointer arithmetic instead of usize address math to preserve pointer provenance
+    viewers: PaddedType<AtomicUsize>,
     params_ptr: TaskParamPointer,
     param_stride: usize,
     params_total_bytes: usize,
@@ -16,7 +17,6 @@ pub struct TaskBatch {
 
     uncompleted: AtomicUsize,
     owner_thread: Thread,
-    viewers: AtomicUsize,
 }
 
 impl TaskBatch {
@@ -25,6 +25,7 @@ impl TaskBatch {
 
         TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
+            viewers: PaddedType::new(AtomicUsize::new(initial_viewers)),
             params_ptr: NonNull::from(params).cast(),
             param_stride: std::mem::size_of::<T>(),
             params_total_bytes: std::mem::size_of_val(params),
@@ -32,7 +33,6 @@ impl TaskBatch {
             next: AtomicPtr::new(std::ptr::null_mut()),
             uncompleted: AtomicUsize::new(params.len()),
             owner_thread: thread::current(),
-            viewers: AtomicUsize::new(initial_viewers),
         }
     }
 

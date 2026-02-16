@@ -136,8 +136,6 @@ impl Queue {
     // wait until work is available or shutdown
     // returns true if work is available, false if shutdown
     pub fn wait_for_work(&self, worker_id: usize) -> bool {
-        let mut is_awake = true;
-
         loop {
             if self.has_tasks() {
                 return true;
@@ -146,15 +144,7 @@ impl Queue {
                 return false;
             }
 
-            if is_awake {
-                is_awake = false;
-                self.threads_is_awake[worker_id].store(false, Ordering::SeqCst);
-
-                if self.has_tasks() {
-                    self.threads_is_awake[worker_id].store(true, Ordering::SeqCst);
-                    return true;
-                }
-            }
+            self.threads_is_awake[worker_id].store(false, Ordering::SeqCst);
 
             thread::park();
         }
@@ -165,13 +155,7 @@ impl Queue {
     }
 
     pub fn has_tasks(&self) -> bool {
-        let head = self.head.load(Ordering::Acquire);
         let tail = self.tail.load(Ordering::SeqCst);
-
-        if head != tail {
-            return true;
-        }
-
         unsafe { (&*tail).has_unclaimed_tasks() }
     }
 
