@@ -72,6 +72,7 @@ fn reclaim_local(retired_batches: &mut Vec<*mut TaskBatch>, reclaim_calls: &mut 
         let can_reclaim = unsafe { (&*batch_ptr).viewers_count() == 0 };
 
         if can_reclaim {
+            println!("reclaim_local: {:?}", batch_ptr);
             unsafe {
                 drop(Box::from_raw(batch_ptr));
             }

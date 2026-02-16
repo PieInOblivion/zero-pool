@@ -91,8 +91,6 @@ fn test_massive_simple_tasks() {
     let count = 200;
     let mut results = vec![0u64; count];
 
-    println!("Starting {} simple tasks...", count);
-
     let tasks: Vec<_> = results
         .iter_mut()
         .map(|result| SimpleTask {
@@ -339,8 +337,6 @@ fn test_reclaim_trigger() {
         iterations: 0,
         result: &mut result,
     };
-
-    println!("Running 300 sequential batches to trigger reclaim...");
 
     for _ in 0..300 {
         let future = pool.submit_task(simple_cpu_task, &params);
