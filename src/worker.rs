@@ -85,7 +85,7 @@ fn reclaim_local(retired_batches: &mut Vec<*mut TaskBatch>, reclaim_calls: &mut 
     }
 
     *reclaim_calls = reclaim_calls.wrapping_add(1);
-    if *reclaim_calls == 0 || *reclaim_calls % RETIRED_VEC_SHRINK_CADENCE == 0 {
+    if *reclaim_calls % RETIRED_VEC_SHRINK_CADENCE == 0 {
         let len = retired_batches.len();
         let cap = retired_batches.capacity();
         let baseline = len.max(RETIRED_VEC_MIN_CAP);
