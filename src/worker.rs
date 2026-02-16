@@ -60,6 +60,8 @@ pub fn spawn_worker(
 
                 reclaim_local(&mut retired_batches, &mut reclaim_calls);
             }
+
+            reclaim_local(&mut retired_batches, &mut reclaim_calls);
         })
         .expect("spawn failed")
 }
