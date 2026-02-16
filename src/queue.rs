@@ -43,6 +43,12 @@ impl Queue {
         }
     }
 
+    pub fn register_worker_thread(&self, worker_id: usize) {
+        unsafe {
+            (*self.threads[worker_id].get()).write(thread::current());
+        }
+    }
+
     pub fn push_task_batch<T>(self: &Arc<Self>, task_fn: fn(&T), params: &[T]) -> TaskFuture {
         let raw_fn: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(raw_fn, params)));
@@ -124,12 +130,6 @@ impl Queue {
                     count -= 1;
                 }
             }
-        }
-    }
-
-    pub fn register_worker_thread(&self, worker_id: usize) {
-        unsafe {
-            (*self.threads[worker_id].get()).write(thread::current());
         }
     }
 
