@@ -21,6 +21,8 @@ pub struct TaskBatch {
 
 impl TaskBatch {
     pub(crate) fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T]) -> Self {
+        let initial_viewers = if params.is_empty() { 1 } else { 2 };
+
         TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
             params_ptr: NonNull::from(params).cast(),
@@ -30,21 +32,7 @@ impl TaskBatch {
             next: AtomicPtr::new(std::ptr::null_mut()),
             count: AtomicUsize::new(params.len()),
             owner_thread: thread::current(),
-            viewers: AtomicUsize::new(2), // queue reference + always-created task future
-        }
-    }
-
-    pub(crate) fn new_anchor(task_fn_ptr: TaskFnPointer) -> Self {
-        TaskBatch {
-            next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
-            params_ptr: NonNull::dangling(),
-            param_stride: 1,
-            params_total_bytes: 0,
-            task_fn_ptr,
-            next: AtomicPtr::new(std::ptr::null_mut()),
-            count: AtomicUsize::new(0),
-            owner_thread: thread::current(),
-            viewers: AtomicUsize::new(0), // anchor reclaimable once head advances beyond it
+            viewers: AtomicUsize::new(initial_viewers),
         }
     }
 
@@ -64,11 +52,11 @@ impl TaskBatch {
     }
 
     pub(crate) fn viewers_increment(&self) {
-        self.viewers.fetch_add(1, Ordering::AcqRel);
+        self.viewers.fetch_add(1, Ordering::Release);
     }
 
-    pub(crate) fn viewers_decrement_and_is_zero(&self) -> bool {
-        self.viewers.fetch_sub(1, Ordering::AcqRel) == 1
+    pub(crate) fn viewers_decrement(&self) {
+        self.viewers.fetch_sub(1, Ordering::Release);
     }
 
     pub(crate) fn viewers_count(&self) -> usize {

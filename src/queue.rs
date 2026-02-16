@@ -3,7 +3,6 @@ use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
-use std::ptr::NonNull;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::thread::{self, Thread};
@@ -11,8 +10,6 @@ use std::thread::{self, Thread};
 pub struct Queue {
     head: PaddedType<AtomicPtr<TaskBatch>>,
     tail: PaddedType<AtomicPtr<TaskBatch>>,
-    oldest: PaddedType<AtomicPtr<TaskBatch>>,
-    reclaiming: PaddedType<AtomicBool>,
     threads_is_awake: Box<[PaddedType<AtomicBool>]>,
     threads: Box<[UnsafeCell<MaybeUninit<Thread>>]>,
     shutdown: AtomicBool,
@@ -24,7 +21,10 @@ unsafe impl Sync for Queue {}
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
         fn noop(_: TaskParamPointer) {}
-        let anchor_node = Box::into_raw(Box::new(TaskBatch::new_anchor(noop)));
+        let anchor_node = Box::into_raw(Box::new(TaskBatch::new::<u8>(noop, &[])));
+        unsafe {
+            (&*anchor_node).viewers_decrement();
+        }
 
         let threads_is_awake: Box<[_]> = (0..worker_count)
             .map(|_| PaddedType::new(AtomicBool::new(false)))
@@ -37,8 +37,6 @@ impl Queue {
         Queue {
             head: PaddedType::new(AtomicPtr::new(anchor_node)),
             tail: PaddedType::new(AtomicPtr::new(anchor_node)),
-            oldest: PaddedType::new(AtomicPtr::new(anchor_node)),
-            reclaiming: PaddedType::new(AtomicBool::new(false)),
             threads_is_awake,
             threads,
             shutdown: AtomicBool::new(false),
@@ -47,7 +45,6 @@ impl Queue {
 
     pub fn push_task_batch<T>(self: &Arc<Self>, task_fn: fn(&T), params: &[T]) -> TaskFuture {
         let raw_fn: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
-        let queue_ptr = NonNull::from(self.as_ref());
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(raw_fn, params)));
 
         let prev_tail = self.tail.swap(new_batch, Ordering::SeqCst);
@@ -56,12 +53,13 @@ impl Queue {
         }
         println!("New Batch: {:?}", new_batch);
         self.notify(params.len());
-        TaskFuture::from_batch(queue_ptr, new_batch)
+        TaskFuture::from_batch(new_batch)
     }
 
     pub fn get_next_batch(
         &self,
         last_incremented_on: &mut *mut TaskBatch,
+        retired_batches: &mut Vec<*mut TaskBatch>,
     ) -> Option<(&TaskBatch, TaskParamPointer)> {
         let mut current = self.head.load(Ordering::Acquire);
 
@@ -76,7 +74,7 @@ impl Queue {
                     *last_incremented_on = current;
 
                     if !previous.is_null() {
-                        self.release_viewer(previous);
+                        unsafe { (&*previous).viewers_decrement() };
                     }
                 }
 
@@ -96,69 +94,13 @@ impl Queue {
                 Ordering::Acquire,
             ) {
                 Ok(_) => {
+                    retired_batches.push(current);
                     current = next;
                 }
                 Err(new_head) => {
                     current = new_head;
                 }
             }
-        }
-    }
-
-    pub fn release_viewer(&self, batch_ptr: *mut TaskBatch) {
-        if batch_ptr.is_null() {
-            return;
-        }
-
-        let _ = unsafe { (&*batch_ptr).viewers_decrement_and_is_zero() };
-    }
-
-    pub fn try_reclaim_worker(&self) {
-        if self
-            .reclaiming
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return;
-        }
-
-        self.reclaim_from_oldest();
-
-        self.reclaiming.store(false, Ordering::Release);
-    }
-
-    fn reclaim_from_oldest(&self) {
-        let oldest = self.oldest.load(Ordering::Acquire);
-
-        let head_snapshot = self.head.load(Ordering::Acquire);
-
-        let mut node = oldest;
-        loop {
-            if node == head_snapshot {
-                break;
-            }
-
-            let viewers = unsafe { (&*node).viewers_count() };
-            if viewers != 0 {
-                break;
-            }
-
-            let next = unsafe { (&*node).next.load(Ordering::Acquire) };
-            unsafe {
-                drop(Box::from_raw(node));
-            }
-            println!("Drop Batch: {:?}", node);
-
-            if next.is_null() {
-                node = next;
-                break;
-            }
-
-            node = next;
-        }
-
-        if node != oldest {
-            self.oldest.store(node, Ordering::Release);
         }
     }
 
@@ -250,7 +192,7 @@ impl Drop for Queue {
             }
         }
 
-        let mut current = self.oldest.load(Ordering::Acquire);
+        let mut current = self.head.load(Ordering::Acquire);
         while !current.is_null() {
             let next = unsafe { (&*current).next.load(Ordering::Acquire) };
             unsafe {

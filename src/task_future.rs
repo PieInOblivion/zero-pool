@@ -1,17 +1,15 @@
 use std::{ptr::NonNull, time::Duration};
 
-use crate::{queue::Queue, task_batch::TaskBatch};
+use crate::task_batch::TaskBatch;
 
 pub struct TaskFuture {
     task: NonNull<TaskBatch>,
-    queue: NonNull<Queue>,
 }
 
 impl TaskFuture {
-    pub(crate) fn from_batch(queue: NonNull<Queue>, task: *mut TaskBatch) -> Self {
+    pub(crate) fn from_batch(task: *mut TaskBatch) -> Self {
         TaskFuture {
             task: unsafe { NonNull::new_unchecked(task) },
-            queue,
         }
     }
     /// Check if all tasks are complete without blocking
@@ -45,17 +43,14 @@ impl Clone for TaskFuture {
             self.task.as_ref().viewers_increment();
         }
 
-        TaskFuture {
-            task: self.task,
-            queue: self.queue,
-        }
+        TaskFuture { task: self.task }
     }
 }
 
 impl Drop for TaskFuture {
     fn drop(&mut self) {
         unsafe {
-            self.queue.as_ref().release_viewer(self.task.as_ptr());
+            self.task.as_ref().viewers_decrement();
         }
     }
 }
