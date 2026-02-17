@@ -3,7 +3,6 @@ use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::thread::{self, Thread};
 
@@ -49,7 +48,7 @@ impl Queue {
         }
     }
 
-    pub fn push_task_batch<T>(self: &Arc<Self>, task_fn: fn(&T), params: &[T]) -> TaskFuture {
+    pub fn push_task_batch<T>(&self, task_fn: fn(&T), params: &[T]) -> TaskFuture {
         let raw_fn: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
         let new_batch = Box::into_raw(Box::new(TaskBatch::new(raw_fn, params)));
 
@@ -57,7 +56,6 @@ impl Queue {
         unsafe {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
-        println!("New Batch: {:?}", new_batch);
         self.notify(params.len());
         TaskFuture::from_batch(new_batch)
     }
@@ -183,7 +181,6 @@ impl Drop for Queue {
             unsafe {
                 TaskBatch::release_ptr(current);
             }
-            println!("Drop() Batch: {:?}", current);
             current = next;
         }
     }

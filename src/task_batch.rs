@@ -3,12 +3,12 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::thread::{self, Thread};
 use std::time::{Duration, Instant};
 
-use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType};
+use crate::{TaskFnPointer, TaskParamPointer};
 
 pub struct TaskBatch {
-    next_byte_offset: PaddedType<AtomicUsize>,
+    next_byte_offset: AtomicUsize,
     // pointer arithmetic instead of usize address math to preserve pointer provenance
-    viewers: PaddedType<AtomicUsize>,
+    viewers: AtomicUsize,
     params_ptr: TaskParamPointer,
     param_stride: usize,
     params_total_bytes: usize,
@@ -24,8 +24,8 @@ impl TaskBatch {
         let initial_viewers = if params.is_empty() { 2 } else { 3 };
 
         TaskBatch {
-            next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
-            viewers: PaddedType::new(AtomicUsize::new(initial_viewers)),
+            next_byte_offset: AtomicUsize::new(0),
+            viewers: AtomicUsize::new(initial_viewers),
             params_ptr: NonNull::from(params).cast(),
             param_stride: std::mem::size_of::<T>(),
             params_total_bytes: std::mem::size_of_val(params),
