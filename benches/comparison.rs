@@ -8,130 +8,7 @@ use rayon::prelude::*;
 use zero_pool::ZeroPool;
 
 const TASK_COUNT: usize = 1000;
-const WORK_PER_TASK: usize = 100;
-
 const INDIVIDUAL_TASK_COUNT: usize = 1000;
-
-// task parameters: work amount, index to write to, and results vector
-struct ComputeTask {
-    work_size: usize,
-    result: *mut u64,
-}
-
-// task function that does some computation and writes result to pointer
-fn compute_task_fn(params: &ComputeTask) {
-    let mut sum = 0u64;
-
-    for i in 0..params.work_size {
-        sum = sum.wrapping_add((i as u64).wrapping_mul(17).wrapping_add(23));
-    }
-
-    unsafe {
-        *params.result = sum;
-    }
-}
-
-struct EmptyTask {
-    result: *mut u64,
-}
-
-fn empty_task_fn(params: &EmptyTask) {
-    // just write a constant to make sure it's not optimised out
-    unsafe {
-        *params.result = 42u64;
-    }
-}
-
-struct IndividualTask {
-    result: *mut u64,
-}
-
-fn individual_empty_task_fn(params: &IndividualTask) {
-    unsafe {
-        *params.result = 42u64;
-    }
-}
-
-#[bench]
-fn bench_indexed_computation_zeropool(b: &mut Bencher) {
-    let pool = ZeroPool::new();
-
-    b.iter(|| {
-        // allocate results vector
-        let mut results = vec![0u64; TASK_COUNT];
-
-        // create all task structs, each with its target pointer
-        let mut tasks = Vec::with_capacity(TASK_COUNT);
-        for result in results.iter_mut().take(TASK_COUNT) {
-            tasks.push(ComputeTask {
-                work_size: WORK_PER_TASK,
-                result,
-            });
-        }
-
-        // submit uniform batch and wait for completion
-        let batch = pool.submit_batch(compute_task_fn, &tasks);
-        batch.wait();
-
-        black_box(results);
-    });
-}
-
-#[bench]
-fn bench_indexed_computation_rayon(b: &mut Bencher) {
-    let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
-
-    b.iter(|| {
-        let results: Vec<u64> = pool.install(|| {
-            (0..TASK_COUNT)
-                .into_par_iter()
-                .map(|_| {
-                    let mut sum = 0u64;
-
-                    // same computational work as zero-pool version
-                    for i in 0..WORK_PER_TASK {
-                        sum = sum.wrapping_add((i as u64).wrapping_mul(17).wrapping_add(23));
-                    }
-
-                    sum
-                })
-                .collect()
-        });
-
-        black_box(results);
-    });
-}
-
-#[bench]
-fn bench_task_overhead_zeropool(b: &mut Bencher) {
-    let pool = ZeroPool::new();
-
-    b.iter(|| {
-        let mut results = vec![0u64; TASK_COUNT];
-
-        let mut tasks = Vec::with_capacity(TASK_COUNT);
-        for result in results.iter_mut().take(TASK_COUNT) {
-            tasks.push(EmptyTask { result });
-        }
-
-        let batch = pool.submit_batch(empty_task_fn, &tasks);
-        batch.wait();
-
-        black_box(results);
-    });
-}
-
-#[bench]
-fn bench_task_overhead_rayon(b: &mut Bencher) {
-    let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
-
-    b.iter(|| {
-        let results: Vec<u64> =
-            pool.install(|| (0..TASK_COUNT).into_par_iter().map(|_| 42u64).collect());
-
-        black_box(results);
-    });
-}
 
 struct HeavyComputeTask {
     seed: u64,
@@ -161,6 +38,17 @@ fn heavy_compute_task_fn(params: &HeavyComputeTask) {
 
     unsafe {
         *params.result = sum;
+    }
+}
+
+struct IndexTask {
+    result: *mut u64,
+}
+
+fn index_task_fn(params: &IndexTask) {
+    // just write a constant to make sure it's not optimised out
+    unsafe {
+        *params.result = 42u64;
     }
 }
 
@@ -240,7 +128,7 @@ fn bench_heavy_compute_rayon(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_individual_tasks_zeropool_empty(b: &mut Bencher) {
+fn bench_individual_tasks_zeropool(b: &mut Bencher) {
     let pool = ZeroPool::new();
 
     b.iter(|| {
@@ -249,12 +137,12 @@ fn bench_individual_tasks_zeropool_empty(b: &mut Bencher) {
         let mut futures = Vec::with_capacity(INDIVIDUAL_TASK_COUNT);
 
         for result in results.iter_mut() {
-            tasks.push(IndividualTask { result });
+            tasks.push(IndexTask { result });
         }
 
         // submit individual tasks
         for task in tasks.iter() {
-            let future = pool.submit_task(individual_empty_task_fn, task);
+            let future = pool.submit_task(index_task_fn, task);
             futures.push(future);
         }
 
@@ -268,7 +156,7 @@ fn bench_individual_tasks_zeropool_empty(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_individual_tasks_rayon_empty(b: &mut Bencher) {
+fn bench_individual_tasks_rayon(b: &mut Bencher) {
     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
 
     b.iter(|| {
@@ -283,6 +171,37 @@ fn bench_individual_tasks_rayon_empty(b: &mut Bencher) {
                 }
             });
         });
+
+        black_box(results);
+    });
+}
+
+#[bench]
+fn bench_task_overhead_zeropool(b: &mut Bencher) {
+    let pool = ZeroPool::new();
+
+    b.iter(|| {
+        let mut results = vec![0u64; TASK_COUNT];
+
+        let mut tasks = Vec::with_capacity(TASK_COUNT);
+        for result in results.iter_mut().take(TASK_COUNT) {
+            tasks.push(IndexTask { result });
+        }
+
+        let batch = pool.submit_batch(index_task_fn, &tasks);
+        batch.wait();
+
+        black_box(results);
+    });
+}
+
+#[bench]
+fn bench_task_overhead_rayon(b: &mut Bencher) {
+    let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
+
+    b.iter(|| {
+        let results: Vec<u64> =
+            pool.install(|| (0..TASK_COUNT).into_par_iter().map(|_| 42u64).collect());
 
         black_box(results);
     });
