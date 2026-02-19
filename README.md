@@ -27,14 +27,12 @@ This approach allows complete freedom to optimise multi-threaded workloads any w
 
 ## Benchmarks (AMD 5900X, Linux 6.18)
 ```rust
-test bench_heavy_compute_rayon             ... bench:   4,906,749.25 ns/iter (+/- 612,314.91)
-test bench_heavy_compute_zeropool          ... bench:   4,691,815.45 ns/iter (+/- 414,315.97)
-test bench_indexed_computation_rayon       ... bench:      31,011.32 ns/iter (+/- 2,054.49)
-test bench_indexed_computation_zeropool    ... bench:      32,298.93 ns/iter (+/- 5,733.07)
-test bench_individual_tasks_rayon_empty    ... bench:     428,244.14 ns/iter (+/- 11,302.18)
-test bench_individual_tasks_zeropool_empty ... bench:     295,761.15 ns/iter (+/- 10,377.49)
-test bench_task_overhead_rayon             ... bench:      29,924.82 ns/iter (+/- 3,091.56)
-test bench_task_overhead_zeropool          ... bench:      33,054.00 ns/iter (+/- 5,003.38)
+test bench_heavy_compute_rayon       ... bench:   4,786,254.25 ns/iter (+/- 836,017.75)
+test bench_heavy_compute_zeropool    ... bench:   4,596,217.10 ns/iter (+/- 558,697.24)
+test bench_individual_tasks_rayon    ... bench:     806,262.31 ns/iter (+/- 41,250.87)
+test bench_individual_tasks_zeropool ... bench:     333,251.91 ns/iter (+/- 17,209.48)
+test bench_task_overhead_rayon       ... bench:      30,159.14 ns/iter (+/- 2,245.28)
+test bench_task_overhead_zeropool    ... bench:      34,001.23 ns/iter (+/- 4,313.39)
 ```
 
 ## Example Usage
