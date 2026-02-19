@@ -53,7 +53,7 @@ impl TaskBatch {
     }
 
     pub(crate) fn viewers_increment(&self) {
-        self.viewers.fetch_add(1, Ordering::Release);
+        self.viewers.fetch_add(1, Ordering::Relaxed);
     }
 
     pub(crate) unsafe fn release_ptr(batch_ptr: *mut TaskBatch) {
