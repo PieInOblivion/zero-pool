@@ -1,31 +1,20 @@
 use std::{
     ptr,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    thread::{self, JoinHandle, Thread},
+    sync::Arc,
+    thread::{self, JoinHandle},
 };
 
-use crate::{queue::Queue, task_batch::TaskBatch};
+use crate::{queue::Queue, startup_latch::LatchSignaler, task_batch::TaskBatch};
 
-pub fn spawn_worker(
-    id: usize,
-    queue: Arc<Queue>,
-    latch_thread: Thread,
-    latch_count_ptr: usize,
-) -> JoinHandle<()> {
+pub fn spawn_worker(id: usize, queue: Arc<Queue>, signaler: LatchSignaler) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {
             // register this thread with the queue's waiter so it can be unparked by id
             queue.register_worker_thread(id);
+
             // signal registration complete
-            let latch_count = unsafe { &*(latch_count_ptr as *const AtomicUsize) };
-            if latch_count.fetch_sub(1, Ordering::Release) == 1 {
-                latch_thread.unpark();
-            }
-            drop(latch_thread);
+            signaler.signal();
 
             let mut last_incremented_on = ptr::null_mut();
 

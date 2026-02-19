@@ -1,10 +1,9 @@
-use crate::{queue::Queue, task_future::TaskFuture, worker::spawn_worker};
+use crate::{
+    queue::Queue, startup_latch::StartupLatch, task_future::TaskFuture, worker::spawn_worker,
+};
 use std::{
     num::NonZeroUsize,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 
@@ -49,17 +48,13 @@ impl ZeroPool {
 
         let queue = Arc::new(Queue::new(worker_count));
 
-        let latch_thread = thread::current();
-        let latch_count = AtomicUsize::new(worker_count);
-        let latch_count_ptr = &latch_count as *const AtomicUsize as usize;
+        let latch = StartupLatch::new(worker_count);
 
         let workers = (0..worker_count)
-            .map(|id| spawn_worker(id, queue.clone(), latch_thread.clone(), latch_count_ptr))
+            .map(|id| spawn_worker(id, queue.clone(), latch.signaler()))
             .collect();
 
-        while latch_count.load(Ordering::Acquire) != 0 {
-            thread::park();
-        }
+        latch.wait();
 
         ZeroPool { queue, workers }
     }
