@@ -3,19 +3,20 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::thread::{self, Thread};
 use std::time::{Duration, Instant};
 
-use crate::{TaskFnPointer, TaskParamPointer};
+use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType};
 
 pub struct TaskBatch {
-    next_byte_offset: AtomicUsize,
+    next_byte_offset: PaddedType<AtomicUsize>,
     // pointer arithmetic instead of usize address math to preserve pointer provenance
-    viewers: AtomicUsize,
+    viewers: PaddedType<AtomicUsize>,
+    uncompleted: PaddedType<AtomicUsize>,
+
     params_ptr: TaskParamPointer,
     param_stride: usize,
     params_total_bytes: usize,
     pub task_fn_ptr: TaskFnPointer,
-    pub next: AtomicPtr<TaskBatch>,
 
-    uncompleted: AtomicUsize,
+    pub next: AtomicPtr<TaskBatch>,
     owner_thread: Thread,
 }
 
@@ -24,14 +25,14 @@ impl TaskBatch {
         let initial_viewers = if params.is_empty() { 2 } else { 3 };
 
         TaskBatch {
-            next_byte_offset: AtomicUsize::new(0),
-            viewers: AtomicUsize::new(initial_viewers),
+            next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
+            viewers: PaddedType::new(AtomicUsize::new(initial_viewers)),
+            uncompleted: PaddedType::new(AtomicUsize::new(params.len())),
             params_ptr: NonNull::from(params).cast(),
             param_stride: std::mem::size_of::<T>(),
             params_total_bytes: std::mem::size_of_val(params),
             task_fn_ptr,
             next: AtomicPtr::new(std::ptr::null_mut()),
-            uncompleted: AtomicUsize::new(params.len()),
             owner_thread: thread::current(),
         }
     }
