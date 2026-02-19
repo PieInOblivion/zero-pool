@@ -64,7 +64,7 @@ impl Queue {
         &self,
         last_incremented_on: &mut *mut TaskBatch,
     ) -> Option<(&TaskBatch, TaskParamPointer)> {
-        let mut current = self.head.load(Ordering::Acquire);
+        let mut current = self.head.load(Ordering::SeqCst);
 
         loop {
             let batch = unsafe { &*current };
@@ -93,8 +93,8 @@ impl Queue {
             match self.head.compare_exchange_weak(
                 current,
                 next,
-                Ordering::Release,
-                Ordering::Acquire,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
             ) {
                 Ok(_) => {
                     unsafe {
@@ -175,7 +175,7 @@ impl Drop for Queue {
             }
         }
 
-        let mut current = self.head.load(Ordering::Acquire);
+        let mut current = self.head.load(Ordering::SeqCst);
         while !current.is_null() {
             let next = unsafe { (&*current).next.load(Ordering::Acquire) };
             unsafe {
