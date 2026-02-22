@@ -83,12 +83,9 @@ impl TaskFuture {
     }
 
     // completes multiple tasks, decrements counter and notifies if all done
-    pub(crate) fn complete_many(&self, count: usize) -> bool {
+    pub(crate) fn complete_many(&self, count: usize) {
         if self.count.fetch_sub(count, Ordering::Release) == count {
             self.owner_thread.unpark();
-            true
-        } else {
-            false
         }
     }
 }

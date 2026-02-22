@@ -3,7 +3,7 @@ use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::thread::{self, Thread};
 
 pub const NOT_IN_CRITICAL: usize = usize::MAX;
@@ -12,7 +12,6 @@ pub const EPOCH_MASK: usize = usize::MAX >> 1; // use only lower bits for epoch
 pub struct Queue {
     head: PaddedType<AtomicPtr<TaskBatch>>,
     tail: PaddedType<AtomicPtr<TaskBatch>>,
-    epoch_ticker: PaddedType<AtomicU8>,
     global_epoch: PaddedType<AtomicUsize>,
     local_epochs: Box<[PaddedType<AtomicUsize>]>,
     threads: Box<[UnsafeCell<MaybeUninit<Thread>>]>,
@@ -43,7 +42,6 @@ impl Queue {
             head: PaddedType::new(AtomicPtr::new(anchor_node)),
             tail: PaddedType::new(AtomicPtr::new(anchor_node)),
             global_epoch: PaddedType::new(AtomicUsize::new(0)),
-            epoch_ticker: PaddedType::new(AtomicU8::new(0)),
             local_epochs,
             threads,
             shutdown: AtomicBool::new(false),
@@ -194,10 +192,8 @@ impl Queue {
         min_epoch
     }
 
-    pub fn batch_completed(&self) {
-        if self.epoch_ticker.fetch_add(1, Ordering::Relaxed) == u8::MAX {
-            self.global_epoch.fetch_add(1, Ordering::Relaxed);
-        }
+    pub fn advance_global_epoch(&self) {
+        self.global_epoch.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn is_shutdown(&self) -> bool {

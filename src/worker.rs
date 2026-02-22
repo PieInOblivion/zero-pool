@@ -43,11 +43,9 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
                         completed += 1;
                     }
 
-                    if batch.future.complete_many(completed) {
-                        queue.batch_completed();
-                    }
+                    batch.future.complete_many(completed);
 
-                    sweep_local_garbage(
+                    maybe_clean_local_garbage(
                         &queue,
                         &mut local_tick,
                         &mut garbage_head,
@@ -74,7 +72,7 @@ fn drain_garbage(garbage_head: &mut *mut TaskBatch) {
     *garbage_head = std::ptr::null_mut();
 }
 
-fn sweep_local_garbage(
+fn maybe_clean_local_garbage(
     queue: &Queue,
     local_tick: &mut u8,
     garbage_head: &mut *mut TaskBatch,
@@ -85,6 +83,15 @@ fn sweep_local_garbage(
         return;
     }
 
+    clean_local_garbage(queue, garbage_head, garbage_tail);
+}
+
+fn clean_local_garbage(
+    queue: &Queue,
+    garbage_head: &mut *mut TaskBatch,
+    garbage_tail: &mut *mut TaskBatch,
+) {
+    queue.advance_global_epoch();
     let safe_epoch = queue.min_active_epoch();
     let mut current = *garbage_head;
 
