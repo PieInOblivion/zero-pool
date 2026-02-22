@@ -8,6 +8,7 @@ use std::thread::{self, Thread};
 
 pub const NOT_IN_CRITICAL: usize = usize::MAX;
 pub const EPOCH_MASK: usize = usize::MAX >> 1; // use only lower bits for epoch
+pub const EPOCH_MASK_HALF: usize = EPOCH_MASK / 2;
 
 pub struct Queue {
     head: PaddedType<AtomicPtr<TaskBatch>>,
@@ -104,32 +105,41 @@ impl Queue {
                 Ordering::Acquire,
             ) {
                 Ok(_) => {
-                    // 1. SAFETY PATCH: Fetch a fresh epoch AFTER/DURING unlinking to prevent preemption use-after-free
-                    let fresh_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
-
-                    unsafe {
-                        // 2. Stamp with fresh epoch (plain write now)
-                        (*current).epoch.store(fresh_epoch, Ordering::Relaxed);
-
-                        // 3. Intrusive link to worker's local garbage chain
-                        (*current)
-                            .local_garbage_next
-                            .store(std::ptr::null_mut(), Ordering::Relaxed);
-                        if garbage_head.is_null() {
-                            *garbage_head = current;
-                        } else {
-                            (**garbage_tail)
-                                .local_garbage_next
-                                .store(current, Ordering::Relaxed);
-                        }
-                        *garbage_tail = current;
-                    }
+                    self.on_consume_batch(current, garbage_head, garbage_tail);
                     current = next;
                 }
                 Err(new_head) => {
                     current = new_head;
                 }
             }
+        }
+    }
+
+    fn on_consume_batch(
+        &self,
+        batch: *mut TaskBatch,
+        garbage_head: &mut *mut TaskBatch,
+        garbage_tail: &mut *mut TaskBatch,
+    ) {
+        // safety, fetch a fresh epoch while unlinking to prevent preemption use after free
+        let fresh_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
+
+        unsafe {
+            // store epoch
+            (*batch).epoch.store(fresh_epoch, Ordering::Relaxed);
+
+            // link to workers local chain
+            (*batch)
+                .local_garbage_next
+                .store(std::ptr::null_mut(), Ordering::Relaxed);
+            if garbage_head.is_null() {
+                *garbage_head = batch;
+            } else {
+                (**garbage_tail)
+                    .local_garbage_next
+                    .store(batch, Ordering::Relaxed);
+            }
+            *garbage_tail = batch;
         }
     }
 
@@ -182,22 +192,25 @@ impl Queue {
         }
     }
 
-    pub fn min_active_epoch(&self) -> usize {
-        let mut min_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
+    pub fn advance_and_min_epoch(&self) -> usize {
+        let global_epoch = self
+            .global_epoch
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1);
+
+        let mut min_epoch = global_epoch & EPOCH_MASK;
+
         for local_epoch in self.local_epochs.iter() {
             let e = local_epoch.load(Ordering::SeqCst);
             if e != NOT_IN_CRITICAL {
-                // Handle wrapping correctly to find the oldest
-                if min_epoch.wrapping_sub(e) & EPOCH_MASK < (EPOCH_MASK / 2) {
+                // determine if e is older than min_epoch in the circular buffer.
+                // the check (min - e) < HALF handles wrap-around
+                if min_epoch.wrapping_sub(e) & EPOCH_MASK < EPOCH_MASK_HALF {
                     min_epoch = e;
                 }
             }
         }
         min_epoch
-    }
-
-    pub fn advance_global_epoch(&self) {
-        self.global_epoch.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn is_shutdown(&self) -> bool {

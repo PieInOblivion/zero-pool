@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    queue::{EPOCH_MASK, NOT_IN_CRITICAL, Queue},
+    queue::{EPOCH_MASK, EPOCH_MASK_HALF, NOT_IN_CRITICAL, Queue},
     task_batch::TaskBatch,
     task_future::TaskFuture,
 };
@@ -36,10 +36,10 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
                     &mut garbage_tail,
                 ) {
                     let mut completed = 1;
-                    (batch.task_fn_ptr)(first_param);
+                    (batch.fn_ptr)(first_param);
 
                     while let Some(param) = batch.claim_next_param() {
-                        (batch.task_fn_ptr)(param);
+                        (batch.fn_ptr)(param);
                         completed += 1;
                     }
 
@@ -54,7 +54,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
                 }
             }
 
-            // Drain local garbage_head list when worker thread exits
+            // worker thread exits
             drain_garbage(&mut garbage_head);
         })
         .expect("spawn failed")
@@ -91,17 +91,15 @@ fn clean_local_garbage(
     garbage_head: &mut *mut TaskBatch,
     garbage_tail: &mut *mut TaskBatch,
 ) {
-    queue.advance_global_epoch();
-    let safe_epoch = queue.min_active_epoch();
+    let safe_epoch = queue.advance_and_min_epoch();
     let mut current = *garbage_head;
 
-    // Sweep local intrusive list
     while !current.is_null() {
         let node_epoch = unsafe { (*current).epoch.load(Ordering::Relaxed) };
 
-        // If the node is older than the minimum active epoch, it's safe to drop
-        if safe_epoch.wrapping_sub(node_epoch) & EPOCH_MASK > 0
-            && safe_epoch.wrapping_sub(node_epoch) & EPOCH_MASK < (EPOCH_MASK / 2)
+        // if the node is older than the minimum active epoch its safe to drop
+        // single branch check for 0 < (safe - node) < HALF
+        if safe_epoch.wrapping_sub(node_epoch).wrapping_sub(1) & EPOCH_MASK < (EPOCH_MASK_HALF - 1)
         {
             let next = unsafe { (*current).local_garbage_next.load(Ordering::Relaxed) };
             unsafe {
@@ -109,7 +107,7 @@ fn clean_local_garbage(
             }
             current = next;
         } else {
-            // List is chronologically sorted; if this node isn't safe, nothing after it is.
+            // list is chronologically sorted; if this node isnt safe, nothing after it is
             break;
         }
     }
