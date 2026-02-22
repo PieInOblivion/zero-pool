@@ -10,9 +10,10 @@ pub struct TaskBatch {
     param_stride: usize,
     params_total_bytes: usize,
     pub task_fn_ptr: TaskFnPointer,
-    pub epoch: AtomicUsize,
+    pub epoch: usize,
     pub future: TaskFuture,
     pub next: AtomicPtr<TaskBatch>,
+    pub local_garbage_next: *mut TaskBatch,
 }
 
 impl TaskBatch {
@@ -23,9 +24,10 @@ impl TaskBatch {
             param_stride: std::mem::size_of::<T>(),
             params_total_bytes: std::mem::size_of_val(params),
             task_fn_ptr,
-            epoch: AtomicUsize::new(0),
+            epoch: 0,
             future,
             next: AtomicPtr::new(std::ptr::null_mut()),
+            local_garbage_next: std::ptr::null_mut(),
         }
     }
 
