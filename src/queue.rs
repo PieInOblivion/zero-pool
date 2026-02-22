@@ -55,8 +55,8 @@ impl Queue {
 
         let future = TaskFuture::new(params.len());
 
-        let raw_fn: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
-        let new_batch = Box::into_raw(Box::new(TaskBatch::new(raw_fn, params, future.clone())));
+        let fn_ptr: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
+        let new_batch = Box::into_raw(Box::new(TaskBatch::new(fn_ptr, params, future.clone())));
 
         let prev_tail = self.tail.swap(new_batch, Ordering::SeqCst);
         unsafe {

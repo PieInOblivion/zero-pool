@@ -9,7 +9,7 @@ pub struct TaskBatch {
     params_ptr: TaskParamPointer,
     param_stride: usize,
     params_total_bytes: usize,
-    pub task_fn_ptr: TaskFnPointer,
+    pub fn_ptr: TaskFnPointer,
     pub epoch: AtomicUsize,
     pub future: TaskFuture,
     pub next: AtomicPtr<TaskBatch>,
@@ -17,13 +17,13 @@ pub struct TaskBatch {
 }
 
 impl TaskBatch {
-    pub fn new<T>(task_fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
+    pub fn new<T>(fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
         TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
             params_ptr: NonNull::from(params).cast(),
             param_stride: std::mem::size_of::<T>(),
             params_total_bytes: std::mem::size_of_val(params),
-            task_fn_ptr,
+            fn_ptr,
             epoch: AtomicUsize::new(0),
             future,
             next: AtomicPtr::new(std::ptr::null_mut()),
