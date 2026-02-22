@@ -1,5 +1,5 @@
 use std::{
-    sync::Arc,
+    sync::{Arc, atomic::Ordering},
     thread::{self, JoinHandle},
 };
 
@@ -63,7 +63,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
 fn drain_garbage(garbage_head: &mut *mut TaskBatch) {
     let mut current = *garbage_head;
     while !current.is_null() {
-        let next = unsafe { (*current).local_garbage_next };
+        let next = unsafe { (*current).local_garbage_next.load(Ordering::Relaxed) };
         unsafe {
             drop(Box::from_raw(current));
         }
@@ -97,13 +97,13 @@ fn clean_local_garbage(
 
     // Sweep local intrusive list
     while !current.is_null() {
-        let node_epoch = unsafe { (*current).epoch };
+        let node_epoch = unsafe { (*current).epoch.load(Ordering::Relaxed) };
 
         // If the node is older than the minimum active epoch, it's safe to drop
         if safe_epoch.wrapping_sub(node_epoch) & EPOCH_MASK > 0
             && safe_epoch.wrapping_sub(node_epoch) & EPOCH_MASK < (EPOCH_MASK / 2)
         {
-            let next = unsafe { (*current).local_garbage_next };
+            let next = unsafe { (*current).local_garbage_next.load(Ordering::Relaxed) };
             unsafe {
                 drop(Box::from_raw(current));
             }

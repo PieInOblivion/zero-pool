@@ -109,14 +109,18 @@ impl Queue {
 
                     unsafe {
                         // 2. Stamp with fresh epoch (plain write now)
-                        (*current).epoch = fresh_epoch;
+                        (*current).epoch.store(fresh_epoch, Ordering::Relaxed);
 
                         // 3. Intrusive link to worker's local garbage chain
-                        (*current).local_garbage_next = std::ptr::null_mut();
+                        (*current)
+                            .local_garbage_next
+                            .store(std::ptr::null_mut(), Ordering::Relaxed);
                         if garbage_head.is_null() {
                             *garbage_head = current;
                         } else {
-                            (**garbage_tail).local_garbage_next = current;
+                            (**garbage_tail)
+                                .local_garbage_next
+                                .store(current, Ordering::Relaxed);
                         }
                         *garbage_tail = current;
                     }
