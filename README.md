@@ -27,12 +27,12 @@ This approach allows complete freedom to optimise multi-threaded workloads any w
 
 ## Benchmarks (AMD 5900X, Linux 6.18)
 ```rust
-test bench_heavy_compute_rayon       ... bench:   4,786,254.25 ns/iter (+/- 836,017.75)
-test bench_heavy_compute_zeropool    ... bench:   4,596,217.10 ns/iter (+/- 558,697.24)
-test bench_individual_tasks_rayon    ... bench:     806,262.31 ns/iter (+/- 41,250.87)
-test bench_individual_tasks_zeropool ... bench:     333,251.91 ns/iter (+/- 17,209.48)
-test bench_task_overhead_rayon       ... bench:      30,159.14 ns/iter (+/- 2,245.28)
-test bench_task_overhead_zeropool    ... bench:      34,001.23 ns/iter (+/- 4,313.39)
+test bench_heavy_compute_rayon       ... bench:   4,873,036.50 ns/iter (+/- 952,238.45)
+test bench_heavy_compute_zeropool    ... bench:   4,485,877.20 ns/iter (+/- 397,240.79)
+test bench_individual_tasks_rayon    ... bench:     782,252.32 ns/iter (+/- 28,578.20)
+test bench_individual_tasks_zeropool ... bench:     458,742.62 ns/iter (+/- 12,855.32)
+test bench_task_overhead_rayon       ... bench:      30,124.76 ns/iter (+/- 1,946.51)
+test bench_task_overhead_zeropool    ... bench:      32,753.55 ns/iter (+/- 4,477.80)
 ```
 
 ## Example Usage
