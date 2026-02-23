@@ -15,6 +15,7 @@ impl GarbageNode {
         }))
     }
 
+    // drops the current node and returns next
     pub fn drop_node(node: *mut GarbageNode) -> *mut GarbageNode {
         unsafe {
             let next = (*node).next;
