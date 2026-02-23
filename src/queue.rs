@@ -1,3 +1,4 @@
+use crate::garbage_node::GarbageNode;
 use crate::padded_type::PaddedType;
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
@@ -72,8 +73,8 @@ impl Queue {
         &self,
         worker_id: usize,
         cached_local_epoch: &mut usize,
-        garbage_head: &mut *mut TaskBatch,
-        garbage_tail: &mut *mut TaskBatch,
+        garbage_head: &mut *mut GarbageNode,
+        garbage_tail: &mut *mut GarbageNode,
     ) -> Option<(&TaskBatch, TaskParamPointer)> {
         let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
@@ -118,28 +119,20 @@ impl Queue {
     fn on_consume_batch(
         &self,
         batch: *mut TaskBatch,
-        garbage_head: &mut *mut TaskBatch,
-        garbage_tail: &mut *mut TaskBatch,
+        garbage_head: &mut *mut GarbageNode,
+        garbage_tail: &mut *mut GarbageNode,
     ) {
         // safety, fetch a fresh epoch while unlinking to prevent preemption use after free
         let fresh_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
+        let garbage_node = GarbageNode::new(batch, fresh_epoch);
 
         unsafe {
-            // store epoch
-            (*batch).epoch.store(fresh_epoch, Ordering::Relaxed);
-
-            // link to workers local chain
-            (*batch)
-                .local_garbage_next
-                .store(std::ptr::null_mut(), Ordering::Relaxed);
             if garbage_head.is_null() {
-                *garbage_head = batch;
+                *garbage_head = garbage_node;
             } else {
-                (**garbage_tail)
-                    .local_garbage_next
-                    .store(batch, Ordering::Relaxed);
+                (**garbage_tail).next = garbage_node;
             }
-            *garbage_tail = batch;
+            *garbage_tail = garbage_node;
         }
     }
 

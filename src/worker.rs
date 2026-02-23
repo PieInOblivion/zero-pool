@@ -1,11 +1,11 @@
 use std::{
-    sync::{Arc, atomic::Ordering},
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 
 use crate::{
+    garbage_node::GarbageNode,
     queue::{EPOCH_MASK, EPOCH_MASK_HALF, NOT_IN_CRITICAL, Queue},
-    task_batch::TaskBatch,
     task_future::TaskFuture,
 };
 
@@ -20,8 +20,8 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
             drop(latch);
 
             let mut cached_local_epoch = NOT_IN_CRITICAL;
-            let mut garbage_head: *mut TaskBatch = std::ptr::null_mut();
-            let mut garbage_tail: *mut TaskBatch = std::ptr::null_mut();
+            let mut garbage_head: *mut GarbageNode = std::ptr::null_mut();
+            let mut garbage_tail: *mut GarbageNode = std::ptr::null_mut();
             let mut local_tick: u8 = 0;
 
             loop {
@@ -60,14 +60,10 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
         .expect("spawn failed")
 }
 
-fn drain_garbage(garbage_head: &mut *mut TaskBatch) {
+fn drain_garbage(garbage_head: &mut *mut GarbageNode) {
     let mut current = *garbage_head;
     while !current.is_null() {
-        let next = unsafe { (*current).local_garbage_next.load(Ordering::Relaxed) };
-        unsafe {
-            drop(Box::from_raw(current));
-        }
-        current = next;
+        current = GarbageNode::drop_node(current);
     }
     *garbage_head = std::ptr::null_mut();
 }
@@ -75,8 +71,8 @@ fn drain_garbage(garbage_head: &mut *mut TaskBatch) {
 fn maybe_clean_local_garbage(
     queue: &Queue,
     local_tick: &mut u8,
-    garbage_head: &mut *mut TaskBatch,
-    garbage_tail: &mut *mut TaskBatch,
+    garbage_head: &mut *mut GarbageNode,
+    garbage_tail: &mut *mut GarbageNode,
 ) {
     *local_tick = local_tick.wrapping_add(1);
     if *local_tick != 0 {
@@ -88,32 +84,25 @@ fn maybe_clean_local_garbage(
 
 fn clean_local_garbage(
     queue: &Queue,
-    garbage_head: &mut *mut TaskBatch,
-    garbage_tail: &mut *mut TaskBatch,
+    garbage_head: &mut *mut GarbageNode,
+    garbage_tail: &mut *mut GarbageNode,
 ) {
     let safe_epoch = queue.advance_and_min_epoch();
     let mut current = *garbage_head;
 
+    // list is chronologically sorted; reclaim prefix only
     while !current.is_null() {
-        let node_epoch = unsafe { (*current).epoch.load(Ordering::Relaxed) };
-
-        // if the node is older than the minimum active epoch its safe to drop
-        // single branch check for 0 < (safe - node) < HALF
+        let node_epoch = unsafe { (*current).epoch };
         if safe_epoch.wrapping_sub(node_epoch).wrapping_sub(1) & EPOCH_MASK < (EPOCH_MASK_HALF - 1)
         {
-            let next = unsafe { (*current).local_garbage_next.load(Ordering::Relaxed) };
-            unsafe {
-                drop(Box::from_raw(current));
-            }
-            current = next;
+            current = GarbageNode::drop_node(current);
         } else {
-            // list is chronologically sorted; if this node isnt safe, nothing after it is
             break;
         }
     }
 
     *garbage_head = current;
-    if garbage_head.is_null() {
+    if current.is_null() {
         *garbage_tail = std::ptr::null_mut();
     }
 }
