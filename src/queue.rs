@@ -1,7 +1,7 @@
 use crate::garbage_node::GarbageNode;
 use crate::padded_type::PaddedType;
 use crate::task_batch::TaskBatch;
-use crate::{TaskFuture, TaskParamPointer};
+use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
@@ -53,7 +53,7 @@ impl Queue {
             return unsafe { TaskFuture::new(batch) };
         }
 
-        let fn_ptr = unsafe { std::mem::transmute(task_fn) };
+        let fn_ptr: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
         let new_batch = TaskBatch::new(fn_ptr, params, params.len(), 2);
 
         self.enqueue_batch(new_batch, params.len())
