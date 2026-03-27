@@ -1,23 +1,33 @@
 use std::{
-    sync::Arc,
-    thread::{self, JoinHandle},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    thread::{self, JoinHandle, Thread},
 };
 
 use crate::{
     garbage_node::GarbageNode,
     queue::{EPOCH_MASK, EPOCH_MASK_HALF, NOT_IN_CRITICAL, Queue},
-    task_future::TaskFuture,
 };
 
-pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHandle<()> {
+pub fn spawn_worker(
+    id: usize,
+    queue: Arc<Queue>,
+    latch: Arc<AtomicUsize>,
+    start_thread: Thread,
+) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {
             // register this thread with the queue's waiter so it can be unparked by id
             queue.register_worker_thread(id);
-            // signal registration complete and wait for all workers + main
-            latch.complete_many(1);
+            // signal registration complete and wake submitter when the last worker is ready
+            if latch.fetch_sub(1, Ordering::Release) == 1 {
+                start_thread.unpark();
+            }
             drop(latch);
+            drop(start_thread);
 
             let mut cached_local_epoch = NOT_IN_CRITICAL;
             let mut garbage_head: *mut GarbageNode = std::ptr::null_mut();
@@ -43,7 +53,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
                         completed += 1;
                     }
 
-                    batch.future.complete_many(completed);
+                    batch.complete_many(completed);
 
                     maybe_clean_local_garbage(
                         &queue,

@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::thread::{self, Thread};
-use std::time::{Duration, Instant};
+use std::ptr::NonNull;
+use std::time::Duration;
+
+use crate::task_batch::TaskBatch;
 
 /// A future that tracks completion of submitted tasks
 ///
@@ -20,17 +20,14 @@ use std::time::{Duration, Instant};
 /// different thread will panic in debug builds and may cause the calling thread
 /// to hang indefinitely in release builds.
 ///
-#[derive(Clone)]
 pub struct TaskFuture {
-    count: Arc<AtomicUsize>,
-    owner_thread: Thread,
+    batch: NonNull<TaskBatch>,
 }
 
 impl TaskFuture {
-    pub(crate) fn new(task_count: usize) -> Self {
+    pub(crate) unsafe fn new(batch: *mut TaskBatch) -> Self {
         TaskFuture {
-            count: Arc::new(AtomicUsize::new(task_count)),
-            owner_thread: thread::current(),
+            batch: unsafe { NonNull::new_unchecked(batch) },
         }
     }
 
@@ -39,22 +36,14 @@ impl TaskFuture {
     /// Returns `true` if all tasks have finished execution.
     /// This is a non-blocking operation using atomic loads.
     pub fn is_complete(&self) -> bool {
-        self.count.load(Ordering::Acquire) == 0
+        unsafe { self.batch.as_ref().is_complete() }
     }
 
     /// Wait for all tasks to complete
     ///
     /// First checks completion with an atomic load; if incomplete, parks the thread that sent the work.
     pub fn wait(&self) {
-        debug_assert_eq!(
-            self.owner_thread.id(),
-            thread::current().id(),
-            "TaskFuture::wait() must be called from the thread that created it."
-        );
-
-        while !self.is_complete() {
-            thread::park();
-        }
+        unsafe { self.batch.as_ref().wait() }
     }
 
     /// Wait for all tasks to complete with a timeout
@@ -63,29 +52,23 @@ impl TaskFuture {
     /// Returns `true` if all tasks completed within the timeout,
     /// `false` if the timeout was reached first.
     pub fn wait_timeout(&self, timeout: Duration) -> bool {
-        debug_assert_eq!(
-            self.owner_thread.id(),
-            thread::current().id(),
-            "TaskFuture::wait_timeout() must be called from the thread that created it."
-        );
-
-        let start = Instant::now();
-        loop {
-            if self.is_complete() {
-                return true;
-            }
-            let elapsed = start.elapsed();
-            if elapsed >= timeout {
-                return false;
-            }
-            thread::park_timeout(timeout - elapsed);
-        }
+        unsafe { self.batch.as_ref().wait_timeout(timeout) }
     }
+}
 
-    // completes multiple tasks, decrements counter and notifies if all done
-    pub(crate) fn complete_many(&self, count: usize) {
-        if self.count.fetch_sub(count, Ordering::Release) == count {
-            self.owner_thread.unpark();
+impl Clone for TaskFuture {
+    fn clone(&self) -> Self {
+        unsafe {
+            self.batch.as_ref().retain();
+        }
+        TaskFuture { batch: self.batch }
+    }
+}
+
+impl Drop for TaskFuture {
+    fn drop(&mut self) {
+        unsafe {
+            self.batch.as_ref().release();
         }
     }
 }

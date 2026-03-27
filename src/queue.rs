@@ -1,7 +1,7 @@
 use crate::garbage_node::GarbageNode;
 use crate::padded_type::PaddedType;
 use crate::task_batch::TaskBatch;
-use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
+use crate::{TaskFuture, TaskParamPointer};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
@@ -23,14 +23,11 @@ pub struct Queue {
 // needed for 'threads'
 unsafe impl Sync for Queue {}
 
+fn noop(_: TaskParamPointer) {}
+
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
-        fn noop(_: TaskParamPointer) {}
-        let anchor_node = Box::into_raw(Box::new(TaskBatch::new::<u8>(
-            noop,
-            &[],
-            TaskFuture::new(0),
-        )));
+        let anchor_node = TaskBatch::new(noop, &[] as &[u8], 0, 1);
 
         let local_epochs: Box<[_]> = (0..worker_count)
             .map(|_| PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)))
@@ -52,21 +49,25 @@ impl Queue {
 
     pub fn push_task_batch<T>(&self, task_fn: fn(&T), params: &[T]) -> TaskFuture {
         if params.is_empty() {
-            return TaskFuture::new(0);
+            let batch = TaskBatch::new(noop, &[] as &[u8], 0, 1);
+            return unsafe { TaskFuture::new(batch) };
         }
 
-        let future = TaskFuture::new(params.len());
+        let fn_ptr = unsafe { std::mem::transmute(task_fn) };
+        let new_batch = TaskBatch::new(fn_ptr, params, params.len(), 2);
 
-        let fn_ptr: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
-        let new_batch = Box::into_raw(Box::new(TaskBatch::new(fn_ptr, params, future.clone())));
+        self.enqueue_batch(new_batch, params.len())
+    }
 
+    fn enqueue_batch(&self, new_batch: *mut TaskBatch, task_count: usize) -> TaskFuture {
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
         unsafe {
             (*prev_tail).next.store(new_batch, Ordering::Release);
         }
 
-        self.notify(params.len());
-        future
+        self.notify(task_count);
+
+        unsafe { TaskFuture::new(new_batch) }
     }
 
     pub fn get_next_batch(
@@ -234,8 +235,9 @@ impl Drop for Queue {
 
         let mut current = self.head.load(Ordering::Relaxed);
         while !current.is_null() {
-            let batch = unsafe { Box::from_raw(current) };
+            let batch = unsafe { &*current };
             current = batch.next.load(Ordering::Relaxed);
+            batch.release();
         }
     }
 }

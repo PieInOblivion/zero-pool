@@ -19,7 +19,7 @@ impl GarbageNode {
     pub fn drop_node(node: *mut GarbageNode) -> *mut GarbageNode {
         unsafe {
             let next = (*node).next;
-            drop(Box::from_raw((*node).task_batch));
+            (*(*node).task_batch).release();
             drop(Box::from_raw(node));
             next
         }
