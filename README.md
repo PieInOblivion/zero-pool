@@ -14,6 +14,8 @@ This is an experimental thread pool implementation focused on exploring lock-fre
 - **Zero per worker queues** - single global queue structure = perfect workload balancing
 - **Zero external dependencies** - standard library only and stable rust
 
+And multi-threaded memory reclamation!
+
 Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
 
 Because the library uses raw pointers, you must ensure parameter structs (including any pointers they contain) remain valid until task completion, and that your task functions are thread-safe.
@@ -128,11 +130,11 @@ fn multiply_task(params: &MultiplyParams) {
 
 let pool = ZeroPool::new();
 
-// Individual task - separate memory location
+// Individual task
 let mut single_result = 0u64;
 let single_task_params = ComputeParams { work_amount: 1000, result: &mut single_result };
 
-// Uniform batch - separate memory from above
+// Uniform batch
 let mut batch_results = vec![0u64; 50];
 let batch_task_params: Vec<_> = batch_results.iter_mut().enumerate()
     .map(|(i, result)| ComputeParams { work_amount: 500 + i, result })
