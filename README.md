@@ -1,7 +1,8 @@
 # Zero-Pool: Consistent High-Performance Thread Pool
-*When nanoseconds matter and overhead is the enemy.*
 
-This is an experimental thread pool implementation focused on exploring lock-free FIFO MPMC queue techniques. Consider this a performance playground rather than a production-ready library.
+A FIFO MPMC thread pool with a single global queue and cooperative memory reclamation.
+
+[Miri verification report](tests/README.md)
 
 ## Key Features:
 
@@ -14,8 +15,6 @@ This is an experimental thread pool implementation focused on exploring lock-fre
 - **Zero per worker queues** - single global queue structure = perfect workload balancing
 - **Zero external dependencies** - standard library only and stable rust
 
-And multi-threaded memory reclamation!
-
 Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
 
 Because the library uses raw pointers, you must ensure parameter structs (including any pointers they contain) remain valid until task completion, and that your task functions are thread-safe.
@@ -25,7 +24,7 @@ This approach allows complete freedom to optimise multi-threaded workloads any w
 #### Notes
 - TaskFuture is easily clonable, but `wait()`/`wait_timeout()` must be called from the thread that submitted the task. `is_complete()` is safe to call from any thread.
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
-- Task functions take a single parameter (e.g. `&MyTaskParams`), and the parameter name can be any valid identifier.
+- Task functions take a single parameter (e.g. `&MyTaskParams`).
 
 ## Benchmarks (AMD 5900X, Linux 6.18)
 ```rust
