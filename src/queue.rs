@@ -26,11 +26,11 @@ unsafe impl Sync for Queue {}
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
         fn noop(_: TaskParamPointer) {}
-        let anchor_node = Box::into_raw(Box::new(TaskBatch::new::<u8>(
+        let anchor_node = TaskBatch::new::<u8>(
             noop,
             &[],
             TaskFuture::new(0),
-        )));
+        );
 
         let local_epochs: Box<[_]> = (0..worker_count)
             .map(|_| PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)))
@@ -58,7 +58,7 @@ impl Queue {
         let future = TaskFuture::new(params.len());
 
         let fn_ptr: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
-        let new_batch = Box::into_raw(Box::new(TaskBatch::new(fn_ptr, params, future.clone())));
+        let new_batch = TaskBatch::new(fn_ptr, params, future.clone());
 
         let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
         unsafe {

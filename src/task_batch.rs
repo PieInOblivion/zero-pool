@@ -15,8 +15,8 @@ pub struct TaskBatch {
 }
 
 impl TaskBatch {
-    pub fn new<T>(fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> Self {
-        TaskBatch {
+    pub fn new<T>(fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> *mut Self {
+        Box::into_raw(Box::new(TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
             next: PaddedType::new(AtomicPtr::new(std::ptr::null_mut())),
             params_ptr: NonNull::from(params).cast(),
@@ -24,7 +24,7 @@ impl TaskBatch {
             params_total_bytes: std::mem::size_of_val(params),
             fn_ptr,
             future,
-        }
+        }))
     }
 
     pub fn claim_next_param(&self) -> Option<TaskParamPointer> {
