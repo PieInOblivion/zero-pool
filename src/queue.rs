@@ -4,6 +4,7 @@ use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
+use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::thread::{self, Thread};
 
@@ -26,11 +27,7 @@ unsafe impl Sync for Queue {}
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
         fn noop(_: TaskParamPointer) {}
-        let anchor_node = TaskBatch::new::<u8>(
-            noop,
-            &[],
-            TaskFuture::new(0),
-        );
+        let anchor = TaskBatch::new(noop, NonNull::dangling(), 0, 0, TaskFuture::new(0));
 
         let local_epochs: Box<[_]> = (0..worker_count)
             .map(|_| PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)))
@@ -41,8 +38,8 @@ impl Queue {
             .collect();
 
         Queue {
-            head: PaddedType::new(AtomicPtr::new(anchor_node)),
-            tail: PaddedType::new(AtomicPtr::new(anchor_node)),
+            head: PaddedType::new(AtomicPtr::new(anchor)),
+            tail: PaddedType::new(AtomicPtr::new(anchor)),
             global_epoch: PaddedType::new(AtomicUsize::new(0)),
             local_epochs,
             threads,
@@ -57,16 +54,41 @@ impl Queue {
 
         let future = TaskFuture::new(params.len());
 
-        let fn_ptr: TaskFnPointer = unsafe { std::mem::transmute(task_fn) };
-        let new_batch = TaskBatch::new(fn_ptr, params, future.clone());
+        let batch = TaskBatch::new(
+            unsafe { std::mem::transmute::<fn(&T), TaskFnPointer>(task_fn) },
+            NonNull::from(params).cast(),
+            std::mem::size_of::<T>(),
+            std::mem::size_of_val(params),
+            future.clone(),
+        );
 
-        let prev_tail = self.tail.swap(new_batch, Ordering::AcqRel);
+        self.push_and_notify(batch, params.len());
+
+        future
+    }
+
+    fn push_and_notify(&self, batch: *mut TaskBatch, mut count: usize) {
+        let prev_tail = self.tail.swap(batch, Ordering::AcqRel);
         unsafe {
-            (*prev_tail).next.store(new_batch, Ordering::Release);
+            (*prev_tail).next.store(batch, Ordering::Release);
         }
 
-        self.notify(params.len());
-        future
+        let num_workers = self.threads.len();
+        count = count.min(num_workers);
+
+        // the added contention of a 'start_from' shared atomic tends to be slower
+        // than iterating over the padded atomics array, even if its from the start every time
+        for i in 0..num_workers {
+            if self.local_epochs[i].load(Ordering::SeqCst) == NOT_IN_CRITICAL {
+                unsafe {
+                    (*self.threads[i].get()).assume_init_ref().unpark();
+                    count -= 1;
+                    if count == 0 {
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     pub fn get_next_batch(
@@ -133,25 +155,6 @@ impl Queue {
                 (**garbage_tail).next = garbage_node;
             }
             *garbage_tail = garbage_node;
-        }
-    }
-
-    pub fn notify(&self, mut count: usize) {
-        let num_workers = self.threads.len();
-        count = count.min(num_workers);
-
-        // the added contention of a 'start_from' shared atomic tends to be slower
-        // than iterating over the padded atomics array, even if its from the start every time
-        for i in 0..num_workers {
-            if self.local_epochs[i].load(Ordering::SeqCst) == NOT_IN_CRITICAL {
-                unsafe {
-                    (*self.threads[i].get()).assume_init_ref().unpark();
-                    count -= 1;
-                    if count == 0 {
-                        break;
-                    }
-                }
-            }
         }
     }
 

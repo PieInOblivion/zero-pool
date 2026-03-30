@@ -1,4 +1,3 @@
-use std::ptr::NonNull;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType, task_future::TaskFuture};
@@ -15,13 +14,19 @@ pub struct TaskBatch {
 }
 
 impl TaskBatch {
-    pub fn new<T>(fn_ptr: TaskFnPointer, params: &[T], future: TaskFuture) -> *mut Self {
+    pub fn new(
+        fn_ptr: TaskFnPointer,
+        params_ptr: TaskParamPointer,
+        param_stride: usize,
+        params_total_bytes: usize,
+        future: TaskFuture,
+    ) -> *mut Self {
         Box::into_raw(Box::new(TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
             next: PaddedType::new(AtomicPtr::new(std::ptr::null_mut())),
-            params_ptr: NonNull::from(params).cast(),
-            param_stride: std::mem::size_of::<T>(),
-            params_total_bytes: std::mem::size_of_val(params),
+            params_ptr,
+            param_stride,
+            params_total_bytes,
             fn_ptr,
             future,
         }))
