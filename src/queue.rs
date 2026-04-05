@@ -76,10 +76,21 @@ impl Queue {
         let num_workers = self.threads.len();
         count = count.min(num_workers);
 
+        let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
+
         // the added contention of a 'start_from' shared atomic tends to be slower
         // than iterating over the padded atomics array, even if its from the start every time
         for i in 0..num_workers {
-            if self.local_epochs[i].load(Ordering::SeqCst) == NOT_IN_CRITICAL {
+            if self.local_epochs[i].load(Ordering::SeqCst) == NOT_IN_CRITICAL
+                && self.local_epochs[i]
+                    .compare_exchange(
+                        NOT_IN_CRITICAL,
+                        global_epoch,
+                        Ordering::SeqCst,
+                        Ordering::Relaxed,
+                    )
+                    .is_ok()
+            {
                 unsafe {
                     (*self.threads[i].get()).assume_init_ref().unpark();
                     count -= 1;
