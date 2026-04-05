@@ -213,6 +213,7 @@ impl Queue {
         self.shutdown.load(Ordering::Acquire)
     }
 
+    // being a single global queue means that if work exists, it will exist on tail
     pub fn has_tasks(&self) -> bool {
         let tail = self.tail.load(Ordering::Acquire);
         unsafe { (&*tail).has_unclaimed_tasks() }
