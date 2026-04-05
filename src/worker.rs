@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     garbage_node::GarbageNode,
-    queue::{EPOCH_MASK, EPOCH_MASK_HALF, NOT_IN_CRITICAL, Queue},
+    queue::{EPOCH_MASK, EPOCH_MASK_HALF, Queue},
     task_future::TaskFuture,
 };
 
@@ -19,22 +19,18 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
             latch.complete_many(1);
             drop(latch);
 
-            let mut cached_local_epoch = NOT_IN_CRITICAL;
             let mut garbage_head: *mut GarbageNode = std::ptr::null_mut();
             let mut garbage_tail: *mut GarbageNode = std::ptr::null_mut();
             let mut local_tick: u8 = 0;
 
             loop {
-                if !queue.wait_for_work(id, &mut cached_local_epoch) {
+                if !queue.wait_for_work(id) {
                     break;
                 }
 
-                while let Some((batch, first_param)) = queue.get_next_batch(
-                    id,
-                    &mut cached_local_epoch,
-                    &mut garbage_head,
-                    &mut garbage_tail,
-                ) {
+                while let Some((batch, first_param)) =
+                    queue.get_next_batch(id, &mut garbage_head, &mut garbage_tail)
+                {
                     let mut completed = 1;
                     (batch.fn_ptr)(first_param);
 

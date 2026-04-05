@@ -94,14 +94,12 @@ impl Queue {
     pub fn get_next_batch(
         &self,
         worker_id: usize,
-        cached_local_epoch: &mut usize,
         garbage_head: &mut *mut GarbageNode,
         garbage_tail: &mut *mut GarbageNode,
     ) -> Option<(&TaskBatch, TaskParamPointer)> {
         let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
-        if *cached_local_epoch != global_epoch {
-            *cached_local_epoch = global_epoch;
+        if self.local_epochs[worker_id].load(Ordering::Relaxed) & EPOCH_MASK != global_epoch {
             // SeqCst acts as a full barrier to publish epoch before touching queue nodes,
             // preventing reclamation races on weak memory models
             self.local_epochs[worker_id].store(global_epoch, Ordering::SeqCst);
@@ -166,7 +164,7 @@ impl Queue {
 
     // wait until work is available or shutdown
     // returns true if work is available, false if shutdown
-    pub fn wait_for_work(&self, worker_id: usize, cached_local_epoch: &mut usize) -> bool {
+    pub fn wait_for_work(&self, worker_id: usize) -> bool {
         loop {
             if self.has_tasks() {
                 return true;
@@ -175,13 +173,10 @@ impl Queue {
                 return false;
             }
 
-            if *cached_local_epoch != NOT_IN_CRITICAL {
-                *cached_local_epoch = NOT_IN_CRITICAL;
-                self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::SeqCst);
+            self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::SeqCst);
 
-                if self.has_tasks() {
-                    return true;
-                }
+            if self.has_tasks() {
+                return true;
             }
 
             thread::park();
