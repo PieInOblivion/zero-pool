@@ -67,20 +67,37 @@ impl Queue {
         future
     }
 
-    fn push_and_notify(&self, batch: *mut TaskBatch, mut count: usize) {
+    fn push_and_notify(&self, batch: *mut TaskBatch, count: usize) {
         let prev_tail = self.tail.swap(batch, Ordering::AcqRel);
         unsafe {
             (*prev_tail).next.store(batch, Ordering::Release);
         }
 
-        let num_workers = self.threads.len();
-        count = count.min(num_workers);
+        self.notify_workers(count.min(self.threads.len()));
+    }
 
-        let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
-
+    #[cfg(not(feature = "cas_submission"))]
+    fn notify_workers(&self, mut count: usize) {
         // the added contention of a 'start_from' shared atomic tends to be slower
         // than iterating over the padded atomics array, even if its from the start every time
-        for i in 0..num_workers {
+        for i in 0..self.threads.len() {
+            if self.local_epochs[i].load(Ordering::SeqCst) == NOT_IN_CRITICAL {
+                unsafe {
+                    (*self.threads[i].get()).assume_init_ref().unpark();
+                }
+                count -= 1;
+                if count == 0 {
+                    break;
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "cas_submission")]
+    fn notify_workers(&self, mut count: usize) {
+        let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
+
+        for i in 0..self.threads.len() {
             if self.local_epochs[i].load(Ordering::SeqCst) == NOT_IN_CRITICAL
                 && self.local_epochs[i]
                     .compare_exchange(
@@ -93,10 +110,10 @@ impl Queue {
             {
                 unsafe {
                     (*self.threads[i].get()).assume_init_ref().unpark();
-                    count -= 1;
-                    if count == 0 {
-                        break;
-                    }
+                }
+                count -= 1;
+                if count == 0 {
+                    break;
                 }
             }
         }

@@ -19,6 +19,9 @@ exclude = [
 [dependencies]
 # stdlib only!
 
+[features]
+cas_submission = []
+
 [dev-dependencies]
 rayon = "1"
 

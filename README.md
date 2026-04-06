@@ -177,3 +177,7 @@ let params = ExampleParams { work: 1_000, result: &mut result };
 
 pool.submit_task(example_task, &params).wait();
 ```
+
+## Feature Flags
+
+- `cas_submission` - Optimise for heavy multi-threaded submission.
