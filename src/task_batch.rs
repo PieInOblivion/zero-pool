@@ -6,10 +6,10 @@ pub struct TaskBatch {
     next_byte_offset: PaddedType<AtomicUsize>,
     // pointer arithmetic instead of usize address math to preserve pointer provenance
     pub next: PaddedType<AtomicPtr<TaskBatch>>,
+    pub fn_ptr: TaskFnPointer,
     params_ptr: TaskParamPointer,
     param_stride: usize,
     params_total_bytes: usize,
-    pub fn_ptr: TaskFnPointer,
     pub future: TaskFuture,
 }
 
@@ -24,10 +24,10 @@ impl TaskBatch {
         Box::into_raw(Box::new(TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
             next: PaddedType::new(AtomicPtr::new(std::ptr::null_mut())),
+            fn_ptr,
             params_ptr,
             param_stride,
             params_total_bytes,
-            fn_ptr,
             future,
         }))
     }
