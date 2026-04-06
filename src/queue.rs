@@ -29,11 +29,11 @@ impl Queue {
         fn noop(_: TaskParamPointer) {}
         let anchor = TaskBatch::new(noop, NonNull::dangling(), 0, 0, TaskFuture::new(0));
 
-        let local_epochs: Box<[_]> = (0..worker_count)
+        let local_epochs = (0..worker_count)
             .map(|_| PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)))
             .collect();
 
-        let threads: Box<[_]> = (0..worker_count)
+        let threads = (0..worker_count)
             .map(|_| UnsafeCell::new(MaybeUninit::uninit()))
             .collect();
 
